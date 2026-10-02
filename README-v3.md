@@ -1,13 +1,11 @@
+<!-- 이전 버전 README (v3): 구현과 검증을 마친 직후 (문서가 docs/ 폴더에 있던 시점), 커밋 cf666fa 시점의 내용. 링크만 현재 파일 위치에 맞게 고쳤다. -->
+
 # Study02_ToDoList
 
 매일 10~20개의 할 일을 관리하는 개인용 할 일 관리 앱입니다.
 설치나 서버 없이 브라우저에서 `index.html`을 열면 바로 실행되고, 새로고침해도 데이터가 유지됩니다.
 
 > 현재 상태: **구현 완료**. 요구사항과 설계는 [PRD.md](PRD.md)에 있습니다.
-
-## 실행 화면
-
-![할 일 앱 실행 화면](ToDoList_v1.png)
 
 ## 주요 기능
 
@@ -46,10 +44,8 @@ style.css                  스타일
 todo-core.js               순수 로직 (상태 변경, 정렬·필터, 진행률, 저장 데이터 검사)
 app.js                     화면 그리기, 이벤트 처리, 저장
 tests/todo-core.test.js    로직 테스트
-PRD.md                     PRD 및 설계 스펙
-PROMPTS.md                 Claude Code 단계별 구현 프롬프트
-ToDoList_v1.png            실행 화면 캡처
-README-v1~v4.md            단계별 이전 README
+PRD.md                PRD 및 설계 스펙
+PROMPTS.md            Claude Code 단계별 구현 프롬프트
 ```
 
 ## 테스트
@@ -64,10 +60,3 @@ node --test
 
 - [PRD 및 설계 스펙](PRD.md)
 - [Claude Code 단계별 구현 프롬프트](PROMPTS.md)
-
-이전 버전의 README는 작업 단계별로 남겨 두었습니다.
-
-- [README-v1.md](README-v1.md): PRD와 설계를 쓴 직후 (구현 전)
-- [README-v2.md](README-v2.md): 구현 프롬프트(PROMPTS.md)를 추가한 직후 (구현 전)
-- [README-v3.md](README-v3.md): 구현과 검증을 마친 직후
-- [README-v4.md](README-v4.md): 문서를 최상위로 옮기고 실행 화면 캡처를 추가한 직후 (배포 전)

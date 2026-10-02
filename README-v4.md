@@ -1,3 +1,5 @@
+<!-- 이전 버전 README (v4): 문서를 최상위로 옮기고 실행 화면 캡처를 추가한 직후 (배포 전), 커밋 669266e 시점의 내용. 링크만 현재 파일 위치에 맞게 고쳤다. -->
+
 # Study02_ToDoList
 
 매일 10~20개의 할 일을 관리하는 개인용 할 일 관리 앱입니다.
@@ -49,7 +51,6 @@ tests/todo-core.test.js    로직 테스트
 PRD.md                     PRD 및 설계 스펙
 PROMPTS.md                 Claude Code 단계별 구현 프롬프트
 ToDoList_v1.png            실행 화면 캡처
-README-v1~v4.md            단계별 이전 README
 ```
 
 ## 테스트
@@ -69,5 +70,3 @@ node --test
 
 - [README-v1.md](README-v1.md): PRD와 설계를 쓴 직후 (구현 전)
 - [README-v2.md](README-v2.md): 구현 프롬프트(PROMPTS.md)를 추가한 직후 (구현 전)
-- [README-v3.md](README-v3.md): 구현과 검증을 마친 직후
-- [README-v4.md](README-v4.md): 문서를 최상위로 옮기고 실행 화면 캡처를 추가한 직후 (배포 전)
