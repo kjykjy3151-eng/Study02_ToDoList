@@ -5,7 +5,7 @@ const TodoCore = require("../todo-core.js");
 const {
   createState,
   addTodo,
-  updateTodoText,
+  updateTodo,
   toggleTodo,
   deleteTodo,
   clearCompleted,
@@ -98,31 +98,50 @@ test.describe("addTodo", () => {
   });
 });
 
-test.describe("updateTodoText", () => {
+test.describe("updateTodo", () => {
   test("내용을 바꾸고 앞뒤 공백을 제거한다", () => {
-    const state = updateTodoText(stateWith([{ id: "a", text: "old" }]), "a", "  new  ");
+    const state = updateTodo(stateWith([{ id: "a", text: "old" }]), "a", {
+      text: "  new  ",
+      category: "work",
+    });
     assert.equal(state.todos[0].text, "new");
   });
 
   test("빈 내용이면 기존 내용을 유지한다", () => {
     const initial = stateWith([{ id: "a", text: "old" }]);
-    assert.equal(updateTodoText(initial, "a", "   "), initial);
+    assert.equal(updateTodo(initial, "a", { text: "   ", category: "work" }), initial);
   });
 
   test("100자를 넘으면 100자로 자른다", () => {
-    const state = updateTodoText(stateWith([{ id: "a" }]), "a", "나".repeat(101));
+    const state = updateTodo(stateWith([{ id: "a" }]), "a", {
+      text: "나".repeat(101),
+      category: "work",
+    });
     assert.equal(state.todos[0].text.length, 100);
+  });
+
+  test("카테고리를 바꾼다", () => {
+    const state = updateTodo(stateWith([{ id: "a", text: "old" }]), "a", {
+      text: "old",
+      category: "study",
+    });
+    assert.equal(state.todos[0].category, "study");
+  });
+
+  test("허용되지 않은 카테고리면 상태를 그대로 돌려준다", () => {
+    const initial = stateWith([{ id: "a" }]);
+    assert.equal(updateTodo(initial, "a", { text: "new", category: "hobby" }), initial);
   });
 
   test("없는 id면 상태를 그대로 돌려준다", () => {
     const initial = stateWith([{ id: "a" }]);
-    assert.equal(updateTodoText(initial, "zzz", "new"), initial);
+    assert.equal(updateTodo(initial, "zzz", { text: "new", category: "work" }), initial);
   });
 
   test("원래 상태를 바꾸지 않는다", () => {
     const initial = stateWith([{ id: "a", text: "old" }]);
     const snapshot = structuredClone(initial);
-    updateTodoText(initial, "a", "new");
+    updateTodo(initial, "a", { text: "new", category: "work" });
     assert.deepEqual(initial, snapshot);
   });
 });

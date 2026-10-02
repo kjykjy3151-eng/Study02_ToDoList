@@ -48,10 +48,11 @@
     };
   }
 
-  function updateTodoText(state, id, text) {
+  // 내용과 카테고리를 함께 바꾼다. 내용이 비었거나 카테고리가 잘못되면 그대로 둔다.
+  function updateTodo(state, id, { text, category }) {
     const normalized = normalizeText(text);
-    if (!normalized) return state;
-    return mapTodo(state, id, (todo) => ({ ...todo, text: normalized }));
+    if (!normalized || !CATEGORIES.includes(category)) return state;
+    return mapTodo(state, id, (todo) => ({ ...todo, text: normalized, category }));
   }
 
   // 완료로 바꾸면 completedAt에 now를 기록하고, 완료를 풀면 null로 되돌린다.
@@ -178,7 +179,7 @@
     CATEGORIES,
     createState,
     addTodo,
-    updateTodoText,
+    updateTodo,
     toggleTodo,
     deleteTodo,
     clearCompleted,

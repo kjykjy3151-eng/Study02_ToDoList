@@ -40,6 +40,7 @@
                autocomplete="off" />
         <button type="submit" id="add-button">추가</button>
       </form>
+      <p id="add-hint" class="add-hint" role="status" hidden></p>
 
       <nav id="filters" class="filters" aria-label="카테고리 필터">
         <button type="button" data-filter="all" aria-pressed="true">전체</button>
@@ -53,7 +54,7 @@
 
       <div class="list-footer">
         <span id="remaining-count" class="remaining"></span>
-        <button type="button" id="clear-completed" hidden></button>
+        <button type="button" id="clear-completed"></button>
       </div>
     </main>
 

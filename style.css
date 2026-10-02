@@ -299,8 +299,28 @@ select {
   cursor: pointer;
 }
 
-#clear-completed:hover {
+#clear-completed:hover:not(:disabled) {
   color: var(--danger);
+}
+
+#clear-completed:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.add-hint {
+  margin: -8px 0 16px;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.todo-edit-category {
+  flex: none;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.875rem;
 }
 
 [hidden] {

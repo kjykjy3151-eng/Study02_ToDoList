@@ -16,6 +16,7 @@
     clearCompleted: document.getElementById("clear-completed"),
     notice: document.getElementById("notice"),
     remaining: document.getElementById("remaining-count"),
+    addHint: document.getElementById("add-hint"),
   };
 
   // 저장소를 쓸 수 있는지, 불러온 데이터가 손상됐었는지. 안내 문구에 쓴다.
@@ -24,6 +25,8 @@
   let state = load();
   // 지금 수정 중인 할 일의 id. 화면 상태라 저장하지 않는다.
   let editingId = null;
+  // 방금 추가·수정한 할 일이 필터 때문에 안 보일 때 띄우는 안내. 저장하지 않는다.
+  let hint = "";
 
   function load() {
     let raw = null;
@@ -72,6 +75,7 @@
 
   function render() {
     renderNotice();
+    renderHint();
     renderProgress();
     renderFilters();
     renderList();
@@ -89,6 +93,11 @@
     els.notice.hidden = message === "";
   }
 
+  function renderHint() {
+    els.addHint.textContent = hint;
+    els.addHint.hidden = hint === "";
+  }
+
   function renderFilters() {
     for (const button of els.filters.querySelectorAll("[data-filter]")) {
       const pressed = button.dataset.filter === state.settings.filter;
@@ -99,7 +108,7 @@
   function renderFooter() {
     const { done, total } = TodoCore.getProgress(state.todos).all;
     els.remaining.textContent = `남은 할 일 ${total - done}개`;
-    els.clearCompleted.hidden = done === 0;
+    els.clearCompleted.disabled = done === 0;
     els.clearCompleted.textContent = `완료 항목 지우기 (${done})`;
   }
 
@@ -135,7 +144,7 @@
     const editInput = els.list.querySelector(".todo-edit-input");
     if (editInput) {
       editInput.focus();
-      editInput.setSelectionRange(editInput.value.length, editInput.value.length);
+      editInput.select();
     }
   }
 
@@ -150,12 +159,17 @@
     toggle.checked = todo.completed;
     toggle.setAttribute("aria-label", `${todo.text} 완료`);
 
-    const badge = document.createElement("span");
-    badge.className = `badge badge-${todo.category}`;
-    badge.textContent = CATEGORY_LABELS[todo.category];
-
+    let badge;
     let text;
     if (todo.id === editingId) {
+      badge = document.createElement("select");
+      badge.className = "todo-edit-category";
+      badge.setAttribute("aria-label", `${todo.text} 카테고리`);
+      for (const category of TodoCore.CATEGORIES) {
+        badge.append(new Option(CATEGORY_LABELS[category], category));
+      }
+      badge.value = todo.category;
+
       text = document.createElement("input");
       text.type = "text";
       text.className = "todo-edit-input";
@@ -163,6 +177,10 @@
       text.value = todo.text;
       text.setAttribute("aria-label", `${todo.text} 수정`);
     } else {
+      badge = document.createElement("span");
+      badge.className = `badge badge-${todo.category}`;
+      badge.textContent = CATEGORY_LABELS[todo.category];
+
       text = document.createElement("span");
       text.className = "todo-text";
       text.textContent = todo.text;
@@ -191,11 +209,22 @@
     renderList();
   }
 
+  // 할 일이 지금 필터에 걸려 목록에서 안 보이면 안내 문구를 만든다.
+  function hiddenByFilterHint(category, action) {
+    const { filter } = state.settings;
+    if (filter === "all" || filter === category) return "";
+    return `${CATEGORY_LABELS[category]}${action}. '전체' 탭에서 보입니다.`;
+  }
+
   // Enter 뒤에 blur가 이어서 와도 한 번만 처리하도록, 수정 중인 id일 때만 진행한다.
-  function finishEdit(id, text) {
+  function finishEdit(id) {
     if (editingId !== id) return;
+    const item = els.list.querySelector(".todo-edit-input").closest(".todo-item");
+    const text = item.querySelector(".todo-edit-input").value;
+    const category = item.querySelector(".todo-edit-category").value;
     editingId = null;
-    const next = TodoCore.updateTodoText(state, id, text);
+    const next = TodoCore.updateTodo(state, id, { text, category });
+    hint = next === state ? "" : hiddenByFilterHint(category, "(으)로 옮겼습니다");
     if (next === state) {
       renderList();
     } else {
@@ -210,8 +239,7 @@
 
   // 수정 중인 내용이 있으면 먼저 저장한다. 다른 항목을 조작하기 전에 부른다.
   function flushEdit() {
-    const input = els.list.querySelector(".todo-edit-input");
-    if (editingId !== null && input) finishEdit(editingId, input.value);
+    if (editingId !== null && els.list.querySelector(".todo-edit-input")) finishEdit(editingId);
   }
 
   function itemId(element) {
@@ -228,7 +256,10 @@
       category: els.category.value,
       now: Date.now(),
     });
-    if (next !== state) els.input.value = "";
+    if (next !== state) {
+      els.input.value = "";
+      hint = hiddenByFilterHint(els.category.value, "에 추가했습니다");
+    }
     commit(next);
     els.input.focus();
   });
@@ -268,26 +299,37 @@
     if (event.target.classList.contains("todo-text")) startEdit(itemId(event.target));
   });
 
+  function isEditControl(element) {
+    return (
+      element instanceof Element &&
+      (element.classList.contains("todo-edit-input") ||
+        element.classList.contains("todo-edit-category"))
+    );
+  }
+
   els.list.addEventListener("keydown", (event) => {
-    if (!event.target.classList.contains("todo-edit-input")) return;
+    if (!isEditControl(event.target)) return;
     // 한글 조합 중의 Enter는 조합을 끝내는 키라서 무시한다.
     if (event.key === "Enter" && !event.isComposing) {
       event.preventDefault();
-      finishEdit(itemId(event.target), event.target.value);
+      finishEdit(itemId(event.target));
     } else if (event.key === "Escape") {
       event.preventDefault();
       cancelEdit();
     }
   });
 
+  // 내용 입력칸과 카테고리 선택 상자 사이를 오갈 때는 수정을 끝내지 않는다.
   els.list.addEventListener("focusout", (event) => {
-    if (!event.target.classList.contains("todo-edit-input")) return;
-    finishEdit(itemId(event.target), event.target.value);
+    if (!isEditControl(event.target) || isEditControl(event.relatedTarget)) return;
+    finishEdit(itemId(event.target));
   });
 
   els.filters.addEventListener("click", (event) => {
     const button = event.target.closest("[data-filter]");
-    if (button) commit(TodoCore.setFilter(state, button.dataset.filter));
+    if (!button) return;
+    hint = "";
+    commit(TodoCore.setFilter(state, button.dataset.filter));
   });
 
   els.clearCompleted.addEventListener("click", () => {
