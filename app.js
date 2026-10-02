@@ -113,14 +113,12 @@
     const progress = TodoCore.getProgress(state.todos);
     const { all } = progress;
     document.getElementById("progress-all-text").textContent =
-      `${all.done} / ${all.total} · ${all.percent}%`;
+      `${all.done} / ${all.total} 완료 (${all.percent}%)`;
     setBar("progress-all-bar", all.percent);
 
-    for (const category of TodoCore.CATEGORIES) {
-      const { done, total, percent } = progress[category];
-      document.getElementById(`progress-${category}-text`).textContent = `${done}/${total}`;
-      setBar(`progress-${category}-bar`, percent);
-    }
+    document.getElementById("progress-categories").textContent = TodoCore.CATEGORIES.map(
+      (category) => `${CATEGORY_LABELS[category]} ${progress[category].done}/${progress[category].total}`
+    ).join(" · ");
   }
 
   function renderList() {

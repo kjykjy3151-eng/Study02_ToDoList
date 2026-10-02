@@ -119,26 +119,9 @@ select {
 }
 
 .progress-categories {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin: 16px 0 0;
-  padding: 0;
-  list-style: none;
+  margin: 12px 0 0;
   font-size: 0.875rem;
   color: var(--text-muted);
-}
-
-.progress-category[data-category="work"] .bar-fill {
-  background: var(--work);
-}
-
-.progress-category[data-category="personal"] .bar-fill {
-  background: var(--personal);
-}
-
-.progress-category[data-category="study"] .bar-fill {
-  background: var(--study);
 }
 
 /* ---------- 입력 ---------- */
@@ -336,11 +319,6 @@ select {
     padding: 16px;
     border: 0;
     border-radius: 0;
-  }
-
-  .progress-categories {
-    grid-template-columns: 1fr;
-    gap: 10px;
   }
 
   .todo-item {

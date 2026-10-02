@@ -233,6 +233,16 @@ test.describe("getProgress", () => {
     assert.deepEqual(getProgress([]), { all: empty, work: empty, personal: empty, study: empty });
   });
 
+  test("모두 완료하면 100%다", () => {
+    const items = [{ id: "a", completed: true }, { id: "b", completed: true }];
+    assert.deepEqual(getProgress(stateWith(items).todos).all, { done: 2, total: 2, percent: 100 });
+  });
+
+  test("3개 중 1개 완료면 33%다", () => {
+    const items = [{ id: "a", completed: true }, { id: "b" }, { id: "c" }];
+    assert.deepEqual(getProgress(stateWith(items).todos).all, { done: 1, total: 3, percent: 33 });
+  });
+
   test("퍼센트를 반올림한다 (12개 중 7개 → 58%)", () => {
     const items = Array.from({ length: 12 }, (_, i) => ({ id: "t" + i, completed: i < 7 }));
     assert.deepEqual(getProgress(stateWith(items).todos).all, { done: 7, total: 12, percent: 58 });
@@ -300,7 +310,6 @@ test.describe("parseSaved", () => {
         validTodo,
         { ...validTodo, id: "" },
         { ...validTodo, id: "b", text: "   " },
-        { ...validTodo, id: "d", category: "hobby" },
         { ...validTodo, id: "e", completed: "yes" },
         { ...validTodo, id: "f", createdAt: "어제" },
         null,
@@ -312,6 +321,20 @@ test.describe("parseSaved", () => {
     const { state, status } = parseSaved(raw);
     assert.equal(status, "ok");
     assert.deepEqual(ids(state.todos), ["a", "g"]);
+  });
+
+  test("알 수 없는 카테고리는 버리지 않고 personal로 바꾼다", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      todos: [
+        { ...validTodo, category: "hobby" },
+        { ...validTodo, id: "b", category: 3 },
+      ],
+    });
+    assert.deepEqual(
+      parseSaved(raw).state.todos.map((t) => t.category),
+      ["personal", "personal"]
+    );
   });
 
   test("100자를 넘는 내용은 버리지 않고 100자로 자른다", () => {

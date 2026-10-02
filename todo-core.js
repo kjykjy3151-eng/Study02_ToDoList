@@ -107,7 +107,6 @@
       todo.id !== "" &&
       typeof todo.text === "string" &&
       todo.text.trim() !== "" &&
-      CATEGORIES.includes(todo.category) &&
       typeof todo.completed === "boolean" &&
       Number.isFinite(todo.createdAt)
     );
@@ -140,6 +139,7 @@
     // 형식이 틀린 항목과 id가 중복된 항목은 버린다.
     // 최대 길이를 넘는 내용은 버리지 않고 자른다 (예전 버전은 200자까지 허용했다).
     // completedAt이 없던 예전 데이터는 null로 채운다.
+    // 알 수 없는 카테고리는 버리지 않고 "개인"으로 옮긴다.
     const seen = new Set();
     const todos = [];
     for (const todo of data.todos) {
@@ -147,7 +147,14 @@
       seen.add(todo.id);
       const { id, text, category, completed, createdAt } = todo;
       const completedAt = completed && Number.isFinite(todo.completedAt) ? todo.completedAt : null;
-      todos.push({ id, text: normalizeText(text), category, completed, createdAt, completedAt });
+      todos.push({
+        id,
+        text: normalizeText(text),
+        category: CATEGORIES.includes(category) ? category : "personal",
+        completed,
+        createdAt,
+        completedAt,
+      });
     }
 
     const settings = data.settings || {};
