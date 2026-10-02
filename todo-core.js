@@ -5,7 +5,7 @@
   "use strict";
 
   const VERSION = 1;
-  const MAX_TEXT_LENGTH = 200;
+  const MAX_TEXT_LENGTH = 100;
   const CATEGORIES = ["work", "personal", "study"];
   const FILTERS = ["all", ...CATEGORIES];
   const DEFAULT_SETTINGS = { filter: "all", lastCategory: "work" };
@@ -33,7 +33,14 @@
   function addTodo(state, { id, text, category, now }) {
     const normalized = normalizeText(text);
     if (!normalized || !CATEGORIES.includes(category)) return state;
-    const todo = { id, text: normalized, category, completed: false, createdAt: now };
+    const todo = {
+      id,
+      text: normalized,
+      category,
+      completed: false,
+      createdAt: now,
+      completedAt: null,
+    };
     return {
       ...state,
       todos: [...state.todos, todo],
@@ -47,8 +54,13 @@
     return mapTodo(state, id, (todo) => ({ ...todo, text: normalized }));
   }
 
-  function toggleTodo(state, id) {
-    return mapTodo(state, id, (todo) => ({ ...todo, completed: !todo.completed }));
+  // 완료로 바꾸면 completedAt에 now를 기록하고, 완료를 풀면 null로 되돌린다.
+  function toggleTodo(state, id, now) {
+    return mapTodo(state, id, (todo) => ({
+      ...todo,
+      completed: !todo.completed,
+      completedAt: todo.completed ? null : now,
+    }));
   }
 
   function deleteTodo(state, id) {
@@ -65,12 +77,12 @@
     return { ...state, settings: { ...state.settings, filter } };
   }
 
-  // 필터를 적용하고, 미완료 → 완료, 각 그룹 안에서는 최근 추가순으로 정렬한다.
+  // 필터를 적용하고, 미완료 → 완료, 각 그룹 안에서는 추가한 순서대로 정렬한다.
   function getVisibleTodos(state) {
     const { filter } = state.settings;
     return state.todos
       .filter((todo) => filter === "all" || todo.category === filter)
-      .sort((a, b) => Number(a.completed) - Number(b.completed) || b.createdAt - a.createdAt);
+      .sort((a, b) => Number(a.completed) - Number(b.completed) || a.createdAt - b.createdAt);
   }
 
   function summarize(todos) {
@@ -95,7 +107,6 @@
       todo.id !== "" &&
       typeof todo.text === "string" &&
       todo.text.trim() !== "" &&
-      todo.text.length <= MAX_TEXT_LENGTH &&
       CATEGORIES.includes(todo.category) &&
       typeof todo.completed === "boolean" &&
       Number.isFinite(todo.createdAt)
@@ -127,13 +138,16 @@
     }
 
     // 형식이 틀린 항목과 id가 중복된 항목은 버린다.
+    // 최대 길이를 넘는 내용은 버리지 않고 자른다 (예전 버전은 200자까지 허용했다).
+    // completedAt이 없던 예전 데이터는 null로 채운다.
     const seen = new Set();
     const todos = [];
     for (const todo of data.todos) {
       if (!isValidTodo(todo) || seen.has(todo.id)) continue;
       seen.add(todo.id);
       const { id, text, category, completed, createdAt } = todo;
-      todos.push({ id, text, category, completed, createdAt });
+      const completedAt = completed && Number.isFinite(todo.completedAt) ? todo.completedAt : null;
+      todos.push({ id, text: normalizeText(text), category, completed, createdAt, completedAt });
     }
 
     const settings = data.settings || {};

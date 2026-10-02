@@ -15,6 +15,7 @@
     empty: document.getElementById("empty-message"),
     clearCompleted: document.getElementById("clear-completed"),
     notice: document.getElementById("notice"),
+    remaining: document.getElementById("remaining-count"),
   };
 
   // 저장소를 쓸 수 있는지, 불러온 데이터가 손상됐었는지. 안내 문구에 쓴다.
@@ -96,7 +97,8 @@
   }
 
   function renderFooter() {
-    const { done } = TodoCore.getProgress(state.todos).all;
+    const { done, total } = TodoCore.getProgress(state.todos).all;
+    els.remaining.textContent = `남은 할 일 ${total - done}개`;
     els.clearCompleted.hidden = done === 0;
     els.clearCompleted.textContent = `완료 항목 지우기 (${done})`;
   }
@@ -246,12 +248,14 @@
     if (!event.target.classList.contains("todo-toggle")) return;
     const id = itemId(event.target);
     flushEdit();
-    commit(TodoCore.toggleTodo(state, id));
+    commit(TodoCore.toggleTodo(state, id, Date.now()));
   });
 
   els.list.addEventListener("click", (event) => {
     if (event.target.closest(".todo-delete")) {
       const id = itemId(event.target);
+      const todo = state.todos.find((t) => t.id === id);
+      if (!window.confirm(`"${todo.text}"을(를) 삭제할까요?`)) return;
       if (editingId === id) editingId = null;
       flushEdit();
       commit(TodoCore.deleteTodo(state, id));

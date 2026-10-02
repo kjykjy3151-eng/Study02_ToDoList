@@ -25,7 +25,7 @@ function stateWith(items) {
       category: item.category || "work",
       now: i + 1,
     });
-    if (item.completed) state = toggleTodo(state, item.id);
+    if (item.completed) state = toggleTodo(state, item.id, 1000 + i);
   });
   return state;
 }
@@ -53,7 +53,14 @@ test.describe("addTodo", () => {
       now: 100,
     });
     assert.deepEqual(state.todos, [
-      { id: "a", text: "보고서 작성", category: "study", completed: false, createdAt: 100 },
+      {
+        id: "a",
+        text: "보고서 작성",
+        category: "study",
+        completed: false,
+        createdAt: 100,
+        completedAt: null,
+      },
     ]);
   });
 
@@ -68,9 +75,9 @@ test.describe("addTodo", () => {
     assert.equal(addTodo(initial, { id: "a", text: "   ", category: "work", now: 1 }), initial);
   });
 
-  test("200자를 넘으면 200자로 자른다", () => {
-    const state = addTodo(createState(), { id: "a", text: "가".repeat(250), category: "work", now: 1 });
-    assert.equal(state.todos[0].text.length, 200);
+  test("100자를 넘으면 100자로 자른다", () => {
+    const state = addTodo(createState(), { id: "a", text: "가".repeat(150), category: "work", now: 1 });
+    assert.equal(state.todos[0].text.length, 100);
   });
 
   test("lastCategory를 추가한 카테고리로 갱신한다", () => {
@@ -102,9 +109,9 @@ test.describe("updateTodoText", () => {
     assert.equal(updateTodoText(initial, "a", "   "), initial);
   });
 
-  test("200자를 넘으면 200자로 자른다", () => {
-    const state = updateTodoText(stateWith([{ id: "a" }]), "a", "나".repeat(201));
-    assert.equal(state.todos[0].text.length, 200);
+  test("100자를 넘으면 100자로 자른다", () => {
+    const state = updateTodoText(stateWith([{ id: "a" }]), "a", "나".repeat(101));
+    assert.equal(state.todos[0].text.length, 100);
   });
 
   test("없는 id면 상태를 그대로 돌려준다", () => {
@@ -122,9 +129,15 @@ test.describe("updateTodoText", () => {
 
 test.describe("toggleTodo", () => {
   test("완료 여부를 뒤집는다", () => {
-    const once = toggleTodo(stateWith([{ id: "a" }]), "a");
+    const once = toggleTodo(stateWith([{ id: "a" }]), "a", 500);
     assert.equal(once.todos[0].completed, true);
-    assert.equal(toggleTodo(once, "a").todos[0].completed, false);
+    assert.equal(toggleTodo(once, "a", 600).todos[0].completed, false);
+  });
+
+  test("완료하면 completedAt을 기록하고, 완료를 풀면 null로 되돌린다", () => {
+    const once = toggleTodo(stateWith([{ id: "a" }]), "a", 500);
+    assert.equal(once.todos[0].completedAt, 500);
+    assert.equal(toggleTodo(once, "a", 600).todos[0].completedAt, null);
   });
 
   test("없는 id면 상태를 그대로 돌려준다", () => {
@@ -135,7 +148,7 @@ test.describe("toggleTodo", () => {
   test("원래 상태를 바꾸지 않는다", () => {
     const initial = stateWith([{ id: "a" }]);
     const snapshot = structuredClone(initial);
-    toggleTodo(initial, "a");
+    toggleTodo(initial, "a", 500);
     assert.deepEqual(initial, snapshot);
   });
 });
@@ -189,8 +202,8 @@ test.describe("getVisibleTodos", () => {
     { id: "s1", category: "study" },
   ];
 
-  test("미완료가 위, 완료가 아래이고 각 그룹 안에서는 최근 추가순이다", () => {
-    assert.deepEqual(ids(getVisibleTodos(stateWith(items))), ["s1", "p1", "w1", "w2"]);
+  test("미완료가 위, 완료가 아래이고 각 그룹 안에서는 추가한 순서다", () => {
+    assert.deepEqual(ids(getVisibleTodos(stateWith(items))), ["w1", "p1", "s1", "w2"]);
   });
 
   test("카테고리 필터를 적용한다", () => {
@@ -200,10 +213,10 @@ test.describe("getVisibleTodos", () => {
 
   test("완료를 해제하면 원래 자리로 돌아간다", () => {
     let state = stateWith([{ id: "a" }, { id: "b" }, { id: "c" }]);
-    state = toggleTodo(state, "b");
-    assert.deepEqual(ids(getVisibleTodos(state)), ["c", "a", "b"]);
-    state = toggleTodo(state, "b");
-    assert.deepEqual(ids(getVisibleTodos(state)), ["c", "b", "a"]);
+    state = toggleTodo(state, "b", 500);
+    assert.deepEqual(ids(getVisibleTodos(state)), ["a", "c", "b"]);
+    state = toggleTodo(state, "b", 600);
+    assert.deepEqual(ids(getVisibleTodos(state)), ["a", "b", "c"]);
   });
 
   test("상태의 todos 배열 순서를 바꾸지 않는다", () => {
@@ -241,7 +254,14 @@ test.describe("getProgress", () => {
 });
 
 test.describe("parseSaved", () => {
-  const validTodo = { id: "a", text: "보고서", category: "work", completed: false, createdAt: 10 };
+  const validTodo = {
+    id: "a",
+    text: "보고서",
+    category: "work",
+    completed: false,
+    createdAt: 10,
+    completedAt: null,
+  };
 
   test("정상 데이터를 불러온다", () => {
     const saved = {
@@ -280,7 +300,6 @@ test.describe("parseSaved", () => {
         validTodo,
         { ...validTodo, id: "" },
         { ...validTodo, id: "b", text: "   " },
-        { ...validTodo, id: "c", text: "x".repeat(201) },
         { ...validTodo, id: "d", category: "hobby" },
         { ...validTodo, id: "e", completed: "yes" },
         { ...validTodo, id: "f", createdAt: "어제" },
@@ -293,6 +312,31 @@ test.describe("parseSaved", () => {
     const { state, status } = parseSaved(raw);
     assert.equal(status, "ok");
     assert.deepEqual(ids(state.todos), ["a", "g"]);
+  });
+
+  test("100자를 넘는 내용은 버리지 않고 100자로 자른다", () => {
+    const raw = JSON.stringify({ version: 1, todos: [{ ...validTodo, text: "x".repeat(200) }] });
+    const { state } = parseSaved(raw);
+    assert.equal(state.todos.length, 1);
+    assert.equal(state.todos[0].text.length, 100);
+  });
+
+  test("completedAt이 없던 예전 데이터는 null로 채운다", () => {
+    const { completedAt, ...old } = validTodo;
+    const raw = JSON.stringify({ version: 1, todos: [old, { ...old, id: "b", completed: true }] });
+    const { state } = parseSaved(raw);
+    assert.deepEqual(state.todos.map((t) => t.completedAt), [null, null]);
+  });
+
+  test("완료 항목의 completedAt은 유지하고, 미완료 항목은 null로 바꾼다", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      todos: [
+        { ...validTodo, completed: true, completedAt: 99 },
+        { ...validTodo, id: "b", completed: false, completedAt: 99 },
+      ],
+    });
+    assert.deepEqual(parseSaved(raw).state.todos.map((t) => t.completedAt), [99, null]);
   });
 
   test("잘못된 설정 값은 기본값으로 바꾼다", () => {
