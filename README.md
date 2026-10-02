@@ -5,6 +5,12 @@
 
 > 현재 상태: **구현 완료**. 요구사항과 설계는 [PRD.md](PRD.md)에 있습니다.
 
+## 바로 사용하기
+
+**https://kjykjy3151-eng.github.io/Study02_ToDoList/**
+
+GitHub Pages로 배포한 주소입니다. 설치 없이 브라우저에서 바로 쓸 수 있습니다.
+
 ## 실행 화면
 
 ![할 일 앱 실행 화면](ToDoList_v1.png)
