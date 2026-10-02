@@ -50,11 +50,11 @@ docs/PRD.md를 읽고, 2부 설계 스펙의 7.2절(todo-core.js), 8절(데이�
 - parseSaved: 정상 데이터(ok), null/빈 문자열(empty), 손상된 JSON(corrupt), version이 1이 아님(corrupt), 형식이 틀린 항목만 제거, 잘못된 settings는 기본값(filter "all", lastCategory "work")
 
 ## 완료 기준
-- node --test tests/ 가 모두 통과한다. 실행 결과를 보여 줘.
+- node --test 가 모두 통과한다. 실행 결과를 보여 줘.
 - 끝나면 변경 사항을 커밋해 줘. 커밋 메시지: "Add todo core logic with tests"
 ```
 
-**완료 확인**: `node --test tests/` 결과가 모두 통과(pass)인지 확인합니다.
+**완료 확인**: `node --test` 결과가 모두 통과(pass)인지 확인합니다.
 
 ---
 
@@ -103,7 +103,7 @@ Playwright로 file:// 경로의 index.html을 열어서 아래를 실제로 확�
 실패한 항목이 있으면 고친 뒤 다시 검증하고, 마지막 화면 스크린샷을 보여 줘.
 
 ## 완료 기준
-- node --test tests/ 가 여전히 모두 통과한다.
+- node --test 가 여전히 모두 통과한다.
 - 위 브라우저 검증 6개 항목이 모두 통과한다. 결과를 항목별로 보여 줘.
 - 끝나면 커밋해 줘. 커밋 메시지: "Add basic UI: add, toggle, delete, persist, progress"
 ```
@@ -149,7 +149,7 @@ Playwright로 file:// 경로의 index.html을 열어서 아래를 실제로 확�
 실패한 항목이 있으면 고친 뒤 다시 검증해.
 
 ## 완료 기준
-- node --test tests/ 가 모두 통과한다.
+- node --test 가 모두 통과한다.
 - 위 브라우저 검증 7개 항목이 모두 통과한다. 결과를 항목별로 보여 줘.
 - 끝나면 커밋해 줘. 커밋 메시지: "Add inline edit, category filter, clear completed"
 ```
@@ -186,7 +186,7 @@ Playwright로 file:// 경로의 index.html을 열어서 아래를 실제로 확�
 실패한 항목이 있으면 고친 뒤 다시 검증하고, 스크린샷을 보여 줘.
 
 ## 완료 기준
-- node --test tests/ 가 모두 통과한다.
+- node --test 가 모두 통과한다.
 - 위 브라우저 검증 5개 항목이 모두 통과한다. 결과를 항목별로 보여 줘.
 - 끝나면 커밋해 줘. 커밋 메시지: "Add error notices and responsive, accessible styles"
 ```
@@ -201,7 +201,7 @@ Playwright로 file:// 경로의 index.html을 열어서 아래를 실제로 확�
 docs/PRD.md 6절(수용 기준)과 11.2절(브라우저 확인)을 기준으로 완성된 앱을 처음부터 끝까지 검증하고 마무리해 줘. 2~4단계에서 기능별로 검증했으니, 이번에는 기능들이 함께 맞물려 동작하는지와 수용 기준 전체를 확인하는 데 집중해.
 
 ## 1) 자동 테스트
-- node --test tests/ 를 실행하고 결과를 보여 줘.
+- node --test 를 실행하고 결과를 보여 줘.
 
 ## 2) 브라우저 검증 (Playwright, 개발용으로만)
 - file:// 경로로 index.html을 열어서 아래 흐름을 실제로 확인해. 앱 저장소에 Playwright 의존성을 추가하지 말고, 검증 스크립트는 임시 위치에서 실행해.
