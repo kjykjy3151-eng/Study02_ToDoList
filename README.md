@@ -57,7 +57,7 @@ todo-core.js               순수 로직 (상태 변경, 정렬·필터, 진행�
 app.js                     화면 그리기, 이벤트 처리, 저장
 tests/todo-core.test.js    로직 테스트
 PRD.md                     PRD (v2.0)와 구현 메모
-PROMPTS.md                 Claude Code 단계별 구현 프롬프트 (PRD v1.0 기준)
+PROMPTS.md                 Claude Code 단계별 구현 프롬프트 (PRD v2.0, 단계마다 승인)
 ToDoList_v2.png            실행 화면 캡처 (현재)
 ToDoList_v1.png            실행 화면 캡처 (PRD v1.0 기준)
 README-v1~v4.md            단계별 이전 README
@@ -74,7 +74,7 @@ node --test
 ## 문서
 
 - [PRD (v2.0)](PRD.md): 요구사항과, 실제 구현이 PRD와 다른 점
-- [Claude Code 단계별 구현 프롬프트](PROMPTS.md): PRD v1.0으로 처음 구현할 때 쓴 프롬프트
+- [Claude Code 단계별 구현 프롬프트](PROMPTS.md): PRD v2.0을 5단계로 구현하는 프롬프트 (단계마다 승인)
 
 이전 버전의 README는 작업 단계별로 남겨 두었습니다.
 
