@@ -10,6 +10,7 @@
 **https://kjykjy3151-eng.github.io/Study02_ToDoList/**
 
 GitHub Pages로 배포한 주소입니다. 설치 없이 브라우저에서 바로 쓸 수 있습니다.
+`main`에 푸시하면 GitHub Actions(`.github/workflows/pages.yml`)가 테스트를 돌리고, 통과하면 자동으로 다시 배포합니다.
 
 ## 실행 화면
 
@@ -51,6 +52,7 @@ GitHub Pages로 배포한 주소입니다. 설치 없이 브라우저에서 바�
 ## 파일 구성
 
 ```
+.github/workflows/pages.yml  테스트 후 GitHub Pages 자동 배포
 index.html                 화면 뼈대
 style.css                  스타일
 todo-core.js               순수 로직 (상태 변경, 정렬·필터, 진행률, 저장 데이터 검사)
