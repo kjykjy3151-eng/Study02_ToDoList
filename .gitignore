@@ -1,0 +1,12 @@
+# 운영체제가 만드는 파일
+.DS_Store
+Thumbs.db
+
+# Claude Code 개인 설정
+.claude/settings.local.json
+
+# superpowers 작업 공간 (구현 중 임시 기록, 브라우저 검증 스크립트)
+.superpowers/
+
+# Node 패키지 (앱은 의존성이 없지만, 실수로 설치했을 때 대비)
+node_modules/
