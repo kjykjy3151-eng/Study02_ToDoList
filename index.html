@@ -71,9 +71,19 @@
         <button type="submit" id="add-button">추가</button>
       </form>
 
-      <nav id="filters" class="filters" aria-label="카테고리 필터"></nav>
+      <nav id="filters" class="filters" aria-label="카테고리 필터">
+        <button type="button" data-filter="all" aria-pressed="true">전체</button>
+        <button type="button" data-filter="work" aria-pressed="false">업무</button>
+        <button type="button" data-filter="personal" aria-pressed="false">개인</button>
+        <button type="button" data-filter="study" aria-pressed="false">공부</button>
+      </nav>
 
       <ul id="todo-list" class="todo-list"></ul>
+      <p id="empty-message" class="empty-message" hidden></p>
+
+      <div class="list-footer">
+        <button type="button" id="clear-completed" hidden></button>
+      </div>
     </main>
 
     <script src="todo-core.js"></script>
