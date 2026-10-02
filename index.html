@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>할 일</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>할 일</h1>
+        <p id="notice" class="notice" role="status" hidden></p>
+      </header>
+
+      <section class="progress" aria-label="진행률">
+        <div class="progress-all">
+          <div class="progress-label">
+            <span>전체</span>
+            <span id="progress-all-text"></span>
+          </div>
+          <div id="progress-all-bar" class="bar" role="progressbar" aria-label="전체 진행률"
+               aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="bar-fill"></div>
+          </div>
+        </div>
+        <ul class="progress-categories">
+          <li class="progress-category" data-category="work">
+            <div class="progress-label">
+              <span>업무</span>
+              <span id="progress-work-text"></span>
+            </div>
+            <div id="progress-work-bar" class="bar" role="progressbar" aria-label="업무 진행률"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="bar-fill"></div>
+            </div>
+          </li>
+          <li class="progress-category" data-category="personal">
+            <div class="progress-label">
+              <span>개인</span>
+              <span id="progress-personal-text"></span>
+            </div>
+            <div id="progress-personal-bar" class="bar" role="progressbar" aria-label="개인 진행률"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="bar-fill"></div>
+            </div>
+          </li>
+          <li class="progress-category" data-category="study">
+            <div class="progress-label">
+              <span>공부</span>
+              <span id="progress-study-text"></span>
+            </div>
+            <div id="progress-study-bar" class="bar" role="progressbar" aria-label="공부 진행률"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="bar-fill"></div>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <form id="add-form" class="add-form">
+        <label class="visually-hidden" for="category-select">카테고리</label>
+        <select id="category-select">
+          <option value="work">업무</option>
+          <option value="personal">개인</option>
+          <option value="study">공부</option>
+        </select>
+        <label class="visually-hidden" for="todo-input">할 일</label>
+        <input id="todo-input" type="text" maxlength="200" placeholder="할 일을 입력하세요"
+               autocomplete="off" />
+        <button type="submit" id="add-button">추가</button>
+      </form>
+
+      <nav id="filters" class="filters" aria-label="카테고리 필터"></nav>
+
+      <ul id="todo-list" class="todo-list"></ul>
+    </main>
+
+    <script src="todo-core.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
