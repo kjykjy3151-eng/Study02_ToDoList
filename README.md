@@ -3,7 +3,7 @@
 매일 10~20개의 할 일을 관리하는 개인용 할 일 관리 앱입니다.
 설치나 서버 없이 브라우저에서 `index.html`을 열면 바로 실행되고, 새로고침해도 데이터가 유지됩니다.
 
-> 현재 상태: **구현 완료**. 요구사항과 설계는 [docs/PRD.md](docs/PRD.md)에 있습니다.
+> 현재 상태: **구현 완료**. 요구사항과 설계는 [PRD.md](PRD.md)에 있습니다.
 
 ## 주요 기능
 
@@ -42,8 +42,8 @@ style.css                  스타일
 todo-core.js               순수 로직 (상태 변경, 정렬·필터, 진행률, 저장 데이터 검사)
 app.js                     화면 그리기, 이벤트 처리, 저장
 tests/todo-core.test.js    로직 테스트
-docs/PRD.md                PRD 및 설계 스펙
-docs/PROMPTS.md            Claude Code 단계별 구현 프롬프트
+PRD.md                     PRD 및 설계 스펙
+PROMPTS.md                 Claude Code 단계별 구현 프롬프트
 ```
 
 ## 테스트
@@ -56,5 +56,10 @@ node --test
 
 ## 문서
 
-- [PRD 및 설계 스펙](docs/PRD.md)
-- [Claude Code 단계별 구현 프롬프트](docs/PROMPTS.md)
+- [PRD 및 설계 스펙](PRD.md)
+- [Claude Code 단계별 구현 프롬프트](PROMPTS.md)
+
+이전 버전의 README는 작업 단계별로 남겨 두었습니다.
+
+- [README-v1.md](README-v1.md): PRD와 설계를 쓴 직후 (구현 전)
+- [README-v2.md](README-v2.md): 구현 프롬프트(PROMPTS.md)를 추가한 직후 (구현 전)
