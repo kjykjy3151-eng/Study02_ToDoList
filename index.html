@@ -4,13 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="업무·개인·공부로 나눠 관리하는 개인용 할 일 앱" />
-    <title>할 일</title>
+    <title>오늘의 할 일</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <main class="app">
       <header class="app-header">
-        <h1>할 일</h1>
+        <h1>오늘의 할 일</h1>
         <p id="notice" class="notice" role="status" hidden></p>
       </header>
 
@@ -67,7 +67,7 @@
           <option value="study">공부</option>
         </select>
         <label class="visually-hidden" for="todo-input">할 일</label>
-        <input id="todo-input" type="text" maxlength="200" placeholder="할 일을 입력하세요"
+        <input id="todo-input" type="text" maxlength="100" placeholder="할 일을 입력하고 Enter"
                autocomplete="off" />
         <button type="submit" id="add-button">추가</button>
       </form>
@@ -83,6 +83,7 @@
       <p id="empty-message" class="empty-message" hidden></p>
 
       <div class="list-footer">
+        <span id="remaining-count" class="remaining"></span>
         <button type="button" id="clear-completed" hidden></button>
       </div>
     </main>
