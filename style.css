@@ -1,17 +1,49 @@
-/* 최소 스타일. 4단계에서 다듬는다. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --text: #1f2328;
+  --text-muted: #5f6672;
+  --border: #d7dbe0;
+  --track: #e6e9ed;
+  --accent: #1f2328;
+  --focus: #2563eb;
+  --notice-bg: #fff4d6;
+  --notice-text: #6b4e00;
+  --danger: #b42318;
+
+  --work: #2563eb;
+  --work-soft: #e0eaff;
+  --personal: #15803d;
+  --personal-soft: #dcf5e4;
+  --study: #7c3aed;
+  --study-soft: #ede4ff;
+
+  --radius: 8px;
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
-.app {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 16px;
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .visually-hidden {
@@ -23,30 +55,104 @@ body {
   white-space: nowrap;
 }
 
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+/* ---------- 머리말과 안내 ---------- */
+
+.app-header h1 {
+  margin: 0 0 16px;
+  font-size: 1.75rem;
+}
+
+.notice {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--notice-bg);
+  color: var(--notice-text);
+}
+
+/* ---------- 진행률 ---------- */
+
+.progress {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
 .progress-label {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
-.progress-categories {
-  list-style: none;
-  padding: 0;
+.progress-all .progress-label {
+  font-weight: 600;
 }
 
 .bar {
   height: 8px;
-  background: #ddd;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--track);
+}
+
+.progress-all .bar {
+  height: 12px;
 }
 
 .bar-fill {
   height: 100%;
   width: 0;
-  background: #333;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease;
 }
+
+.progress-categories {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.progress-category[data-category="work"] .bar-fill {
+  background: var(--work);
+}
+
+.progress-category[data-category="personal"] .bar-fill {
+  background: var(--personal);
+}
+
+.progress-category[data-category="study"] .bar-fill {
+  background: var(--study);
+}
+
+/* ---------- 입력 ---------- */
 
 .add-form {
   display: flex;
   gap: 8px;
+  margin: 24px 0 16px;
+}
+
+.add-form select,
+.add-form input,
+.todo-edit-input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
 .add-form input {
@@ -54,24 +160,172 @@ body {
   min-width: 0;
 }
 
+.add-form button {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+/* ---------- 필터 ---------- */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.filters button {
+  padding: 4px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.filters button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---------- 목록 ---------- */
+
 .todo-list {
-  list-style: none;
+  margin: 0;
   padding: 0;
+  list-style: none;
 }
 
 .todo-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.todo-toggle {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.badge {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-work {
+  background: var(--work-soft);
+  color: var(--work);
+}
+
+.badge-personal {
+  background: var(--personal-soft);
+  color: var(--personal);
+}
+
+.badge-study {
+  background: var(--study-soft);
+  color: var(--study);
 }
 
 .todo-text {
   flex: 1;
+  min-width: 0;
   overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.todo-edit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
 }
 
 .todo-item.completed .todo-text {
+  color: var(--text-muted);
   text-decoration: line-through;
+}
+
+.todo-item.completed .badge {
   opacity: 0.6;
+}
+
+.todo-edit,
+.todo-delete {
+  flex: none;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.todo-edit:hover {
+  background: var(--track);
+  color: var(--text);
+}
+
+.todo-delete:hover {
+  background: var(--track);
+  color: var(--danger);
+}
+
+.empty-message {
+  margin: 0;
+  padding: 32px 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.list-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+#clear-completed {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+#clear-completed:hover {
+  color: var(--danger);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- 좁은 화면 ---------- */
+
+@media (max-width: 480px) {
+  .app {
+    padding-top: 16px;
+  }
+
+  .progress-categories {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .todo-item {
+    gap: 6px;
+  }
 }

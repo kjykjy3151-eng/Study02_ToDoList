@@ -14,8 +14,12 @@
     filters: document.getElementById("filters"),
     empty: document.getElementById("empty-message"),
     clearCompleted: document.getElementById("clear-completed"),
+    notice: document.getElementById("notice"),
   };
 
+  // 저장소를 쓸 수 있는지, 불러온 데이터가 손상됐었는지. 안내 문구에 쓴다.
+  let storageOk = true;
+  let loadedCorrupt = false;
   let state = load();
   // 지금 수정 중인 할 일의 id. 화면 상태라 저장하지 않는다.
   let editingId = null;
@@ -25,9 +29,19 @@
     try {
       raw = localStorage.getItem(STORAGE_KEY);
     } catch {
-      // 저장소를 쓸 수 없으면 빈 목록으로 시작한다.
+      storageOk = false;
     }
-    return TodoCore.parseSaved(raw).state;
+
+    const { state: loaded, status } = TodoCore.parseSaved(raw);
+    if (status === "corrupt") {
+      loadedCorrupt = true;
+      try {
+        localStorage.setItem(STORAGE_KEY + ":corrupt", raw);
+      } catch {
+        storageOk = false;
+      }
+    }
+    return loaded;
   }
 
   function save() {
@@ -35,6 +49,7 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // 저장에 실패해도 앱은 계속 동작한다.
+      storageOk = false;
     }
   }
 
@@ -55,10 +70,22 @@
   // ---------- 그리기 ----------
 
   function render() {
+    renderNotice();
     renderProgress();
     renderFilters();
     renderList();
     renderFooter();
+  }
+
+  function renderNotice() {
+    let message = "";
+    if (!storageOk) {
+      message = "이 브라우저에서는 저장되지 않습니다";
+    } else if (loadedCorrupt) {
+      message = "저장된 데이터를 읽을 수 없어 새로 시작합니다";
+    }
+    els.notice.textContent = message;
+    els.notice.hidden = message === "";
   }
 
   function renderFilters() {
