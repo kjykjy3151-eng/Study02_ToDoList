@@ -5,6 +5,10 @@
 
 > 현재 상태: **구현 완료**. 요구사항과 설계는 [PRD.md](PRD.md)에 있습니다.
 
+## 실행 화면
+
+![할 일 앱 실행 화면](ToDoList_v1.png)
+
 ## 주요 기능
 
 - 할 일 추가, 수정(더블클릭 또는 [수정]), 삭제
@@ -44,6 +48,7 @@ app.js                     화면 그리기, 이벤트 처리, 저장
 tests/todo-core.test.js    로직 테스트
 PRD.md                     PRD 및 설계 스펙
 PROMPTS.md                 Claude Code 단계별 구현 프롬프트
+ToDoList_v1.png            실행 화면 캡처
 ```
 
 ## 테스트
