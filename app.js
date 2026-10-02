@@ -208,6 +208,12 @@
     renderList();
   }
 
+  // 수정 중인 내용이 있으면 먼저 저장한다. 다른 항목을 조작하기 전에 부른다.
+  function flushEdit() {
+    const input = els.list.querySelector(".todo-edit-input");
+    if (editingId !== null && input) finishEdit(editingId, input.value);
+  }
+
   function itemId(element) {
     return element.closest(".todo-item").dataset.id;
   }
@@ -227,16 +233,32 @@
     els.input.focus();
   });
 
+  // 수정 중에 목록의 버튼·체크박스를 누르면, 포커스가 먼저 빠지면서 목록이 다시 그려져
+  // 누른 요소가 사라지고 클릭이 무시된다. 포커스를 수정 입력창에 붙잡아 두고,
+  // 클릭 처리에서 수정 내용을 먼저 저장한 뒤 동작을 실행한다.
+  els.list.addEventListener("mousedown", (event) => {
+    if (editingId !== null && event.target.closest("button, .todo-toggle")) {
+      event.preventDefault();
+    }
+  });
+
   els.list.addEventListener("change", (event) => {
     if (!event.target.classList.contains("todo-toggle")) return;
-    commit(TodoCore.toggleTodo(state, itemId(event.target)));
+    const id = itemId(event.target);
+    flushEdit();
+    commit(TodoCore.toggleTodo(state, id));
   });
 
   els.list.addEventListener("click", (event) => {
     if (event.target.closest(".todo-delete")) {
-      commit(TodoCore.deleteTodo(state, itemId(event.target)));
+      const id = itemId(event.target);
+      if (editingId === id) editingId = null;
+      flushEdit();
+      commit(TodoCore.deleteTodo(state, id));
     } else if (event.target.closest(".todo-edit")) {
-      startEdit(itemId(event.target));
+      const id = itemId(event.target);
+      flushEdit();
+      startEdit(id);
     }
   });
 
