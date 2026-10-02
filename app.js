@@ -17,6 +17,7 @@
     notice: document.getElementById("notice"),
     remaining: document.getElementById("remaining-count"),
     addHint: document.getElementById("add-hint"),
+    allDone: document.getElementById("all-done"),
   };
 
   // 저장소를 쓸 수 있는지, 불러온 데이터가 손상됐었는지. 안내 문구에 쓴다.
@@ -124,6 +125,7 @@
     document.getElementById("progress-all-text").textContent =
       `${all.done} / ${all.total} 완료 (${all.percent}%)`;
     setBar("progress-all-bar", all.percent);
+    els.allDone.hidden = all.total === 0 || all.done < all.total;
 
     document.getElementById("progress-categories").textContent = TodoCore.CATEGORIES.map(
       (category) => `${CATEGORY_LABELS[category]} ${progress[category].done}/${progress[category].total}`
@@ -135,7 +137,7 @@
     els.list.replaceChildren(...visible.map(renderItem));
 
     if (state.todos.length === 0) {
-      els.empty.textContent = "할 일을 추가해 보세요";
+      els.empty.textContent = "오늘 할 일을 추가해 보세요";
     } else if (visible.length === 0) {
       els.empty.textContent = "이 카테고리에 할 일이 없습니다";
     }
@@ -158,6 +160,9 @@
     toggle.className = "todo-toggle";
     toggle.checked = todo.completed;
     toggle.setAttribute("aria-label", `${todo.text} 완료`);
+    const toggleWrap = document.createElement("label");
+    toggleWrap.className = "todo-toggle-wrap";
+    toggleWrap.append(toggle);
 
     let badge;
     let text;
@@ -198,7 +203,7 @@
     del.textContent = "삭제";
     del.setAttribute("aria-label", `${todo.text} 삭제`);
 
-    li.append(toggle, badge, text, edit, del);
+    li.append(toggleWrap, badge, text, edit, del);
     return li;
   }
 
@@ -268,7 +273,7 @@
   // 누른 요소가 사라지고 클릭이 무시된다. 포커스를 수정 입력창에 붙잡아 두고,
   // 클릭 처리에서 수정 내용을 먼저 저장한 뒤 동작을 실행한다.
   els.list.addEventListener("mousedown", (event) => {
-    if (editingId !== null && event.target.closest("button, .todo-toggle")) {
+    if (editingId !== null && event.target.closest("button, .todo-toggle-wrap")) {
       event.preventDefault();
     }
   });
@@ -287,7 +292,11 @@
       if (!window.confirm(`"${todo.text}"을(를) 삭제할까요?`)) return;
       if (editingId === id) editingId = null;
       flushEdit();
+      // 지운 뒤에는 그 자리에 오는 다음 항목으로, 다음 항목이 없으면 입력칸으로 포커스를 옮긴다.
+      const index = TodoCore.getVisibleTodos(state).findIndex((t) => t.id === id);
       commit(TodoCore.deleteTodo(state, id));
+      const next = els.list.querySelectorAll(".todo-toggle").item(index);
+      (next || els.input).focus();
     } else if (event.target.closest(".todo-edit")) {
       const id = itemId(event.target);
       flushEdit();
@@ -343,4 +352,5 @@
 
   els.category.value = state.settings.lastCategory;
   render();
+  els.input.focus();
 })();
