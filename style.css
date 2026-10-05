@@ -84,8 +84,10 @@ h1 {
   background: var(--surface);
 }
 
+/* 폼 폭이 420px 미만이면 basis 가 매우 커져 입력창이 혼자 한 줄을 차지하고,
+   그 이상이면 basis 가 0 이 되어 네 컨트롤이 한 줄에 놓인다. 미디어 쿼리 없이 줄바꿈 기준을 만든다. */
 #todo-input {
-  flex: 1 1 120px;
+  flex: 1 1 calc((420px - 100%) * 999);
   min-width: 0;
 }
 
