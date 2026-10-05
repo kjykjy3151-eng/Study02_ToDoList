@@ -4,17 +4,20 @@
 
 const STORAGE_KEY = "todos.v1";
 
-// render 가 의존하는 최소 형식: 객체이고, id, text 는 문자열, done 은 불리언, dueDate 는 null 또는 문자열.
+// render 가 의존하는 최소 형식: 객체이고, id, text 는 문자열, category 는 세 카테고리 중 하나, done 은 불리언, dueDate 는 null 또는 문자열.
 function isTodo(value) {
   return typeof value === "object" && value !== null
     && typeof value.id === "string"
     && typeof value.text === "string"
+    && ["업무", "개인", "공부"].includes(value.category)
     && typeof value.done === "boolean"
     && (value.dueDate === null || typeof value.dueDate === "string");
 }
 
 // 저장된 값이 없으면 빈 배열. 파싱에 실패하거나 배열이 아니면 원본을 broken 키로 옮기고 빈 배열로 시작한다.
-// 배열 안의 형식이 맞지 않는 요소는 그 요소만 버리고 나머지는 살린다(broken 키로는 옮기지 않는다).
+// 배열 안의 형식이 맞지 않는 요소는 그 요소만 버리고 나머지는 살린다. 버린 요소는 화면에 그릴 수 없는 것이라 보관하지 않는다:
+// broken 키로 옮기지 않으며, 저장소에는 남아 있다가 다음 저장(saveTodos) 때 함께 지워진다.
+// broken 키는 값 전체를 파싱할 수 없을 때만 쓴다.
 function loadTodos(key = STORAGE_KEY) {
   const raw = localStorage.getItem(key);
   if (raw === null) return [];
@@ -86,6 +89,12 @@ function countByCategory(todos, category) {
 // ===== 렌더 =====
 
 // <li> 하나를 만들어 돌려주기만 한다. 사용자 데이터는 전부 textContent/속성으로 넣는다(innerHTML 금지).
+// 체크박스와 삭제 버튼의 접근성 이름. 항목을 처음 그릴 때와 수정 후 부분 갱신할 때 같은 형식을 쓰도록 한곳에 둔다.
+function setItemLabels(row, text) {
+  row.querySelector(".todo-check").setAttribute("aria-label", text);
+  row.querySelector(".todo-delete").setAttribute("aria-label", "삭제: " + text);
+}
+
 function renderItem(todo) {
   const li = document.createElement("li");
   li.className = todo.done ? "todo-item is-done" : "todo-item";
@@ -95,7 +104,6 @@ function renderItem(todo) {
   check.type = "checkbox";
   check.className = "todo-check";
   check.checked = todo.done;
-  check.setAttribute("aria-label", todo.text);
 
   const text = document.createElement("span");
   text.className = "todo-text";
@@ -113,10 +121,10 @@ function renderItem(todo) {
   const del = document.createElement("button");
   del.type = "button";
   del.className = "todo-delete";
-  del.setAttribute("aria-label", "삭제: " + todo.text);
   del.textContent = "✕";
 
   li.append(check, text, category, due, del);
+  setItemLabels(li, todo.text);
   return li;
 }
 
@@ -156,6 +164,8 @@ function render() {
     ? "아직 할 일이 없습니다. 위에서 추가해 보세요."
     : "조건에 맞는 할 일이 없습니다.";
 }
+
+// ===== 변경 =====
 
 // 변경 함수는 모두 상태 변경, 저장, 다시 그리기 순서로 끝낸다.
 function addTodo(text, category, dueDate) {
@@ -258,8 +268,7 @@ function startEdit(id) {
     restored.className = "todo-text";
     restored.textContent = current.text;
     input.replaceWith(restored);
-    row.querySelector(".todo-check").setAttribute("aria-label", current.text);
-    row.querySelector(".todo-delete").setAttribute("aria-label", "삭제: " + current.text);
+    setItemLabels(row, current.text);
   });
 
   editingId = id;
@@ -272,7 +281,10 @@ function startEdit(id) {
 document.getElementById("todo-form").addEventListener("submit", event => {
   event.preventDefault();
   const input = document.getElementById("todo-input");
-  if (input.value.trim() === "") return; // 공백만 입력하면 입력창과 마감일을 그대로 둔다.
+  if (input.value.trim() === "") { // 공백만 입력하면 입력창과 마감일을 그대로 두고, 추가 버튼을 눌렀더라도 포커스는 입력창에 둔다.
+    input.focus();
+    return;
+  }
   addTodo(input.value, document.getElementById("category-select").value, document.getElementById("due-input").value);
   input.value = "";
   document.getElementById("due-input").value = "";
@@ -315,6 +327,14 @@ document.getElementById("category-tabs").addEventListener("click", event => {
 document.getElementById("status-filter").addEventListener("click", event => {
   const button = event.target.closest("[data-status]");
   if (button) setFilter({ status: button.dataset.status });
+});
+
+// 창이 다시 포커스를 받으면 저장소를 다시 읽는다. 다른 탭이 그동안 저장한 내용을 이 탭의 오래된 스냅샷이 덮어쓰지 않게 하려는 것이다.
+// 수정 중에는 입력 중인 글을 잃지 않도록 건너뛴다. storage 이벤트는 file:// 문서 사이에서 전달되는지 보장되지 않아 쓰지 않는다.
+window.addEventListener("focus", () => {
+  if (editingId !== null) return;
+  state.todos = loadTodos();
+  render();
 });
 
 // 시작: 저장된 데이터를 불러와 첫 화면을 그린다. 항상 app.js 맨 아래에 둔다.
