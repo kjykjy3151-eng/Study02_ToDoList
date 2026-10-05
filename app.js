@@ -244,7 +244,22 @@ function startEdit(id) {
   input.addEventListener("blur", () => {
     if (editingId === null) return;
     editingId = null;
-    updateTodoText(id, input.value);
+    // 다른 항목을 누르다가 일어난 blur 일 수 있다. render 로 목록을 통째로 바꾸면 누르던 요소가 떨어져 나가
+    // click 이 만들어지지 않으므로, 상태와 저장소만 고치고 입력창을 글자로 되돌리는 데서 그친다.
+    const current = state.todos.find(item => item.id === id);
+    const row = input.closest(".todo-item");
+    if (!current || !row) return;
+    const trimmed = input.value.trim();
+    if (trimmed !== "") {
+      current.text = trimmed;
+      saveTodos(state.todos);
+    }
+    const restored = document.createElement("span");
+    restored.className = "todo-text";
+    restored.textContent = current.text;
+    input.replaceWith(restored);
+    row.querySelector(".todo-check").setAttribute("aria-label", current.text);
+    row.querySelector(".todo-delete").setAttribute("aria-label", "삭제: " + current.text);
   });
 
   editingId = id;

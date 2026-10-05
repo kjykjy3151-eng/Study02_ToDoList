@@ -362,6 +362,40 @@
         assertEqual(editInput(), null, "빈 내용이 거부되어도 입력창은 닫힌다");
         assertEqual(list.querySelector(".todo-text").textContent, "블러로 저장", "빈 내용이 거부되면 원래 텍스트가 다시 보인다");
 
+        // 수정 중에 다른 항목을 누르면: 누른 요소가 살아 있어야 click 이 도착한다. (mousedown -> blur -> click 순서)
+        state.todos = [
+          t({id: "m", text: "수정할 것", dueDate: "2026-10-01"}),
+          t({id: "n", text: "누를 것", dueDate: "2026-10-02"}),
+        ];
+        render();
+        list.children[0].querySelector(".todo-text").click();
+        const otherCheck = list.children[1].querySelector(".todo-check");
+        editInput().value = "수정됨";
+        otherCheck.dispatchEvent(new MouseEvent("mousedown", {bubbles: true}));
+        editInput().dispatchEvent(new Event("blur"));
+        assertEqual(otherCheck.isConnected, true, "blur 로 수정이 끝나도 다른 항목의 체크박스는 목록에 그대로 있다");
+        otherCheck.click();
+        assertEqual(state.todos[1].done, true, "수정 중 다른 항목의 체크박스를 한 번 누르면 바로 완료된다");
+        assertEqual(state.todos[0].text, "수정됨", "그때 수정하던 내용도 저장된다");
+        assertEqual(loadTodos()[0].text, "수정됨", "수정 내용이 저장소에도 반영된다");
+
+        // 같은 방식으로 다른 항목의 텍스트를 누르면 그 항목의 수정이 시작된다.
+        render();
+        list.children[0].querySelector(".todo-text").click();
+        const otherText = list.children[1].querySelector(".todo-text");
+        otherText.dispatchEvent(new MouseEvent("mousedown", {bubbles: true}));
+        editInput().dispatchEvent(new Event("blur"));
+        otherText.click();
+        assertEqual(editInput() !== null && editInput().value === "누를 것", true, "수정 중 다른 항목의 텍스트를 한 번 누르면 그 항목의 수정이 시작된다");
+        editInput().dispatchEvent(new Event("blur"));
+
+        // blur 로 끝난 항목의 접근성 이름도 새 텍스트를 따라간다.
+        list.children[0].querySelector(".todo-text").click();
+        editInput().value = "이름 바뀜";
+        editInput().dispatchEvent(new Event("blur"));
+        assertEqual(list.children[0].querySelector(".todo-check").getAttribute("aria-label"), "이름 바뀜", "수정 후 체크박스의 접근성 이름이 새 텍스트가 된다");
+        assertEqual(list.children[0].querySelector(".todo-delete").getAttribute("aria-label"), "삭제: 이름 바뀜", "수정 후 삭제 버튼의 접근성 이름이 새 텍스트가 된다");
+
         // 필터: 두 축은 AND 이고, 저장하지 않으며, 진행률은 전체 기준이다.
         const statusBox = document.getElementById("status-filter");
         for (const s of ["전체", "미완료", "완료"]) {
