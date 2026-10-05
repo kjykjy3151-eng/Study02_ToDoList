@@ -1,0 +1,78 @@
+<!-- 생성: 2026-10-05 20:52 KST -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>할 일</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="progress">
+      <div class="progress-head">
+        <h1>할 일</h1>
+        <span id="progress-count">1 / 3</span>
+      </div>
+      <div class="progress-row">
+        <div class="progress-bar">
+          <div id="progress-fill" style="width: 33%"></div>
+        </div>
+        <span id="progress-percent">33%</span>
+      </div>
+    </header>
+
+    <form id="todo-form" class="add-form">
+      <input type="text" id="todo-input" placeholder="새 할 일 입력" autocomplete="off">
+      <select id="category-select" aria-label="카테고리">
+        <option value="업무">업무</option>
+        <option value="개인" selected>개인</option>
+        <option value="공부">공부</option>
+      </select>
+      <input type="date" id="due-input" aria-label="마감일">
+      <button type="submit">추가</button>
+    </form>
+
+    <div id="category-tabs" class="filter-row">
+      <button type="button" class="filter-btn is-active" data-category="전체">전체</button>
+      <button type="button" class="filter-btn" data-category="업무">업무</button>
+      <button type="button" class="filter-btn" data-category="개인">개인</button>
+      <button type="button" class="filter-btn" data-category="공부">공부</button>
+    </div>
+
+    <div id="status-filter" class="filter-row">
+      <button type="button" class="filter-btn is-active" data-status="전체">전체</button>
+      <button type="button" class="filter-btn" data-status="미완료">미완료</button>
+      <button type="button" class="filter-btn" data-status="완료">완료</button>
+    </div>
+
+    <ul id="todo-list">
+      <li class="todo-item" data-id="sample-1">
+        <input type="checkbox" class="todo-check">
+        <span class="todo-text">주간 보고서 작성</span>
+        <span class="todo-category">업무</span>
+        <span class="todo-due">10/07</span>
+        <button class="todo-delete" aria-label="삭제">✕</button>
+      </li>
+      <li class="todo-item" data-id="sample-2">
+        <input type="checkbox" class="todo-check">
+        <span class="todo-text">abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij</span>
+        <span class="todo-category">공부</span>
+        <span class="todo-due"></span>
+        <button class="todo-delete" aria-label="삭제">✕</button>
+      </li>
+      <li class="todo-item is-done" data-id="sample-3">
+        <input type="checkbox" class="todo-check" checked>
+        <span class="todo-text">운동 30분</span>
+        <span class="todo-category">개인</span>
+        <span class="todo-due"></span>
+        <button class="todo-delete" aria-label="삭제">✕</button>
+      </li>
+    </ul>
+
+    <p id="empty-state" hidden>할 일이 없습니다.</p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
