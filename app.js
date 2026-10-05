@@ -185,8 +185,21 @@ document.getElementById("todo-form").addEventListener("submit", event => {
 document.getElementById("todo-list").addEventListener("click", event => {
   const item = event.target.closest(".todo-item");
   if (!item) return;
-  if (event.target.classList.contains("todo-check")) toggleTodo(item.dataset.id);
-  else if (event.target.classList.contains("todo-delete")) deleteTodo(item.dataset.id);
+  const list = event.currentTarget;
+  if (event.target.classList.contains("todo-check")) {
+    toggleTodo(item.dataset.id);
+    // 다시 그리면서 포커스가 사라지므로, 같은 항목(자리만 옮겨졌다)의 체크박스로 되돌린다.
+    for (const li of list.children) {
+      if (li.dataset.id === item.dataset.id) li.querySelector(".todo-check").focus();
+    }
+  } else if (event.target.classList.contains("todo-delete")) {
+    const index = Array.from(list.children).indexOf(item);
+    deleteTodo(item.dataset.id);
+    // 항목이 사라졌으므로 같은 자리의 다음 항목, 없으면 이전 항목, 목록이 비면 입력창으로 보낸다.
+    const target = list.children[index] || list.children[index - 1];
+    if (target) target.querySelector(".todo-delete").focus();
+    else document.getElementById("todo-input").focus();
+  }
 });
 
 // 시작: 저장된 데이터를 불러와 첫 화면을 그린다. 항상 app.js 맨 아래에 둔다.
