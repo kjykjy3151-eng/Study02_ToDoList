@@ -40,6 +40,9 @@ const state = {
   filter: { category: "전체", status: "전체" },
 };
 
+// 지금 인라인 수정 중인 항목의 id. 수정 중이 아니면 null. Esc 가 이 값을 먼저 비워서 뒤따르는 blur 가 저장으로 처리되지 않게 한다.
+let editingId = null;
+
 // ===== 순수 함수 =====
 
 function makeId() {
@@ -130,15 +133,20 @@ function render() {
   document.getElementById("progress-count").textContent = progress.done + " / " + progress.total;
   document.getElementById("progress-percent").textContent = progress.percent + "%";
 
-  // 3. 카테고리 탭: 전체 탭은 전체 개수만, 나머지는 완료/전체.
+  // 3. 카테고리 탭: 전체 탭은 전체 개수만, 나머지는 완료/전체. 현재 필터와 같은 버튼에 is-active 를 붙인다.
   for (const button of document.querySelectorAll("#category-tabs [data-category]")) {
     const category = button.dataset.category;
+    button.classList.toggle("is-active", category === state.filter.category);
     if (category === "전체") {
       button.textContent = "전체 " + state.todos.length;
     } else {
       const count = countByCategory(state.todos, category);
       button.textContent = category + " " + count.done + "/" + count.total;
     }
+  }
+
+  for (const button of document.querySelectorAll("#status-filter [data-status]")) {
+    button.classList.toggle("is-active", button.dataset.status === state.filter.status);
   }
 
   // 4. 빈 상태: 데이터 자체가 없을 때와 필터 때문에 비었을 때 문구를 구분한다.
@@ -179,6 +187,71 @@ function deleteTodo(id) {
   render();
 }
 
+// 텍스트가 빈 값이면 저장하지 않지만, 입력창이 열려 있을 수 있으므로 다시 그려서 원래 텍스트를 되돌린다.
+function updateTodoText(id, text) {
+  const todo = state.todos.find(item => item.id === id);
+  if (!todo) return;
+  const trimmed = text.trim();
+  if (trimmed !== "") {
+    todo.text = trimmed;
+    saveTodos(state.todos);
+  }
+  render();
+}
+
+// 필터는 데이터가 아니므로 저장하지 않는다. 새로고침하면 기본값으로 돌아간다.
+function setFilter(partial) {
+  state.filter = Object.assign({}, state.filter, partial);
+  render();
+}
+
+// 항목 id 에 해당하는 <li> 안의 요소에 포커스를 준다. 그 항목이 지금 그려져 있지 않으면 false.
+function focusItem(id, selector) {
+  for (const li of document.getElementById("todo-list").children) {
+    if (li.dataset.id === id) {
+      li.querySelector(selector).focus();
+      return true;
+    }
+  }
+  return false;
+}
+
+// .todo-text 를 입력창으로 바꾼다. 종료 경로는 Enter(저장), Esc(버림), blur(저장) 세 가지다.
+function startEdit(id) {
+  const todo = state.todos.find(item => item.id === id);
+  const li = Array.from(document.getElementById("todo-list").children).find(el => el.dataset.id === id);
+  if (!todo || !li) return;
+  const label = li.querySelector(".todo-text");
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "todo-edit";
+  input.value = todo.text;
+  input.setAttribute("aria-label", "할 일 수정");
+
+  input.addEventListener("keydown", event => {
+    if (event.isComposing) return; // 한글 조합 중의 Enter 는 글자를 확정할 뿐 저장이 아니다.
+    if (event.key === "Enter") {
+      editingId = null; // render 가 입력창을 떼면서 일으킬 수 있는 blur 가 두 번째 저장이 되지 않게 먼저 비운다.
+      updateTodoText(id, input.value);
+      focusItem(id, ".todo-check");
+    } else if (event.key === "Escape") {
+      editingId = null; // 반드시 render 보다 먼저. 그래야 뒤따르는 blur 가 저장으로 처리되지 않는다.
+      render();
+      focusItem(id, ".todo-check");
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (editingId === null) return;
+    editingId = null;
+    updateTodoText(id, input.value);
+  });
+
+  editingId = id;
+  label.replaceWith(input);
+  input.focus();
+}
+
 // ===== 이벤트 =====
 
 document.getElementById("todo-form").addEventListener("submit", event => {
@@ -197,11 +270,17 @@ document.getElementById("todo-list").addEventListener("click", event => {
   if (!item) return;
   const list = event.currentTarget;
   if (event.target.classList.contains("todo-check")) {
+    const index = Array.from(list.children).indexOf(item);
     toggleTodo(item.dataset.id);
     // 다시 그리면서 포커스가 사라지므로, 같은 항목(자리만 옮겨졌다)의 체크박스로 되돌린다.
-    for (const li of list.children) {
-      if (li.dataset.id === item.dataset.id) li.querySelector(".todo-check").focus();
+    if (!focusItem(item.dataset.id, ".todo-check")) {
+      // 필터 때문에 항목이 목록에서 사라졌다면 그 자리를 이어받은 항목, 없으면 이전 항목, 목록이 비면 입력창으로 보낸다.
+      const target = list.children[index] || list.children[index - 1];
+      if (target) target.querySelector(".todo-check").focus();
+      else document.getElementById("todo-input").focus();
     }
+  } else if (event.target.classList.contains("todo-text")) {
+    startEdit(item.dataset.id);
   } else if (event.target.classList.contains("todo-delete")) {
     const index = Array.from(list.children).indexOf(item);
     deleteTodo(item.dataset.id);
@@ -210,6 +289,17 @@ document.getElementById("todo-list").addEventListener("click", event => {
     if (target) target.querySelector(".todo-delete").focus();
     else document.getElementById("todo-input").focus();
   }
+});
+
+// 필터 버튼도 목록처럼 위임으로 연결한다. render 는 버튼을 다시 만들지 않으므로 포커스가 유지된다.
+document.getElementById("category-tabs").addEventListener("click", event => {
+  const button = event.target.closest("[data-category]");
+  if (button) setFilter({ category: button.dataset.category });
+});
+
+document.getElementById("status-filter").addEventListener("click", event => {
+  const button = event.target.closest("[data-status]");
+  if (button) setFilter({ status: button.dataset.status });
 });
 
 // 시작: 저장된 데이터를 불러와 첫 화면을 그린다. 항상 app.js 맨 아래에 둔다.

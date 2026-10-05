@@ -300,11 +300,132 @@
         list.querySelector(".todo-delete").click();
         assertEqual(list.children.length, 0, "남은 항목을 모두 지우면 목록이 비어 있다");
         assertEqual(document.activeElement, input, "목록이 비면 포커스는 입력창으로 간다");
+
+        // 수정: 빈 텍스트는 거부하고, 저장할 때는 앞뒤 공백을 지운다.
+        state.todos = [t({id: "a", text: "원래 내용"})];
+        updateTodoText("a", "   ");
+        assertEqual(state.todos[0].text, "원래 내용", "빈 내용으로는 저장하지 않고 원래 텍스트를 유지한다");
+        updateTodoText("a", "  바뀐 내용  ");
+        assertEqual(state.todos[0].text, "바뀐 내용", "저장할 때 앞뒤 공백을 제거한다");
+        assertEqual(loadTodos()[0].text, "바뀐 내용", "수정 결과가 저장소에 반영된다");
+
+        // 인라인 수정: 실제 DOM 이벤트로 세 가지 종료 경로를 확인한다.
+        const keydown = (el, key) => el.dispatchEvent(new KeyboardEvent("keydown", {key, bubbles: true}));
+        const editInput = () => list.querySelector(".todo-edit");
+
+        state.todos = [t({id: "a", text: "원래 내용"})];
+        render();
+        list.querySelector(".todo-text").click();
+        assertEqual(editInput() !== null, true, "텍스트를 클릭하면 입력창으로 바뀐다");
+        assertEqual(list.querySelector(".todo-text"), null, "입력창으로 바뀌면 텍스트 span 은 사라진다");
+        assertEqual(editInput().value, "원래 내용", "입력창에 현재 텍스트가 담긴다");
+        assertEqual(document.activeElement, editInput(), "입력창에 포커스가 간다");
+        editInput().value = "엔터로 저장";
+        keydown(editInput(), "Enter");
+        assertEqual(state.todos[0].text, "엔터로 저장", "Enter 는 수정 내용을 저장한다");
+        assertEqual(editInput(), null, "Enter 후에는 입력창이 사라진다");
+        assertEqual(list.querySelector(".todo-text").textContent, "엔터로 저장", "Enter 후 새 텍스트가 보인다");
+
+        // Esc: 저장하지 않는다. 뒤따르는 blur 까지 흉내 내어 저장으로 처리되지 않는지 본다.
+        list.querySelector(".todo-text").click();
+        const escInput = editInput();
+        escInput.value = "버릴 내용";
+        // 브라우저는 포커스가 있는 입력창을 떼어낼 때 blur 를 일으킬 수 있다. 그 blur 가 render 도중에 도착하는 경우를 흉내 낸다.
+        const realRender = render;
+        render = function () {
+          escInput.dispatchEvent(new Event("blur"));
+          realRender();
+        };
+        try {
+          keydown(escInput, "Escape");
+        } finally {
+          render = realRender;
+        }
+        escInput.dispatchEvent(new Event("blur")); // render 가 끝난 뒤에 늦게 도착하는 blur
+        assertEqual(state.todos[0].text, "엔터로 저장", "Esc 는 변경을 저장하지 않는다");
+        assertEqual(loadTodos()[0].text, "엔터로 저장", "Esc 후 뒤따르는 blur 도 저장소를 바꾸지 않는다");
+        assertEqual(editInput(), null, "Esc 후에는 입력창이 사라진다");
+        assertEqual(list.querySelector(".todo-text").textContent, "엔터로 저장", "Esc 후 원래 텍스트로 돌아온다");
+
+        // blur: 저장한다.
+        list.querySelector(".todo-text").click();
+        editInput().value = "블러로 저장";
+        editInput().dispatchEvent(new Event("blur"));
+        assertEqual(state.todos[0].text, "블러로 저장", "포커스 이탈은 수정 내용을 저장한다");
+        assertEqual(editInput(), null, "포커스 이탈 후에는 입력창이 사라진다");
+
+        // 모두 지우고 Enter: 원래 텍스트를 유지하고 입력창도 닫힌다.
+        list.querySelector(".todo-text").click();
+        editInput().value = "";
+        keydown(editInput(), "Enter");
+        assertEqual(state.todos[0].text, "블러로 저장", "내용을 모두 지우고 Enter 를 눌러도 원래 텍스트가 유지된다");
+        assertEqual(editInput(), null, "빈 내용이 거부되어도 입력창은 닫힌다");
+        assertEqual(list.querySelector(".todo-text").textContent, "블러로 저장", "빈 내용이 거부되면 원래 텍스트가 다시 보인다");
+
+        // 필터: 두 축은 AND 이고, 저장하지 않으며, 진행률은 전체 기준이다.
+        const statusBox = document.getElementById("status-filter");
+        for (const s of ["전체", "미완료", "완료"]) {
+          const b = document.createElement("button");
+          b.dataset.status = s;
+          statusBox.appendChild(b);
+        }
+        state.todos = [
+          t({id: "a", text: "업무 미완료", category: "업무", done: false, createdAt: 1}),
+          t({id: "b", text: "업무 완료", category: "업무", done: true, createdAt: 2}),
+          t({id: "c", text: "개인 미완료", category: "개인", done: false, createdAt: 3}),
+        ];
+        state.filter = {category: "전체", status: "전체"};
+        render();
+        const textsOf = () => Array.from(list.children).map(li => li.querySelector(".todo-text").textContent);
+        const isActive = (box, attr, value) => box.querySelector("[data-" + attr + '="' + value + '"]').classList.contains("is-active");
+
+        const savedBefore = localStorage.getItem("todos.v1");
+        localStorage.setItem("todos.v1", "센티넬");
+        setFilter({category: "업무"});
+        assertEqual(localStorage.getItem("todos.v1"), "센티넬", "setFilter 는 저장소를 건드리지 않는다");
+        if (savedBefore === null) localStorage.removeItem("todos.v1");
+        else localStorage.setItem("todos.v1", savedBefore);
+        assertDeepEqual(state.filter, {category: "업무", status: "전체"}, "setFilter 는 전달한 축만 바꾸고 다른 축은 유지한다");
+        assertEqual(list.children.length, 2, "카테고리 필터는 해당 카테고리만 보인다");
+        setFilter({status: "미완료"});
+        assertDeepEqual(textsOf(), ["업무 미완료"], "카테고리와 상태 필터는 AND 로 적용된다");
+        assertEqual(countText(), "1 / 3", "필터를 바꿔도 진행 숫자는 전체 데이터 기준이다");
+        assertEqual(isActive(tabs, "category", "업무"), true, "현재 카테고리 버튼에 is-active 가 붙는다");
+        assertEqual(isActive(tabs, "category", "전체"), false, "이전 카테고리 버튼에서는 is-active 가 빠진다");
+        assertEqual(isActive(statusBox, "status", "미완료"), true, "현재 상태 버튼에 is-active 가 붙는다");
+        assertEqual(isActive(statusBox, "status", "전체"), false, "이전 상태 버튼에서는 is-active 가 빠진다");
+
+        // 버튼 클릭이 위임으로 setFilter 에 연결된다.
+        statusBox.querySelector('[data-status="완료"]').click();
+        assertEqual(state.filter.status, "완료", "상태 버튼 클릭이 상태 필터를 바꾼다");
+        tabs.querySelector('[data-category="개인"]').click();
+        assertEqual(state.filter.category, "개인", "카테고리 버튼 클릭이 카테고리 필터를 바꾼다");
+        assertEqual(list.children.length, 0, "개인 + 완료에 맞는 항목이 없으면 목록이 비어 있다");
+
+        // 필터가 방금 토글한 항목을 숨기면 포커스를 잃지 않는다.
+        state.todos = [
+          t({id: "p", text: "가", dueDate: "2026-10-01"}),
+          t({id: "q", text: "나", dueDate: "2026-10-02"}),
+          t({id: "r", text: "다", dueDate: "2026-10-03"}),
+        ];
+        state.filter = {category: "전체", status: "미완료"};
+        render();
+        list.children[1].querySelector(".todo-check").focus();
+        list.children[1].querySelector(".todo-check").click(); // "나" 가 완료되어 미완료 필터에서 사라진다
+        assertEqual(list.children.length, 2, "미완료 필터에서 체크한 항목은 목록에서 사라진다");
+        assertEqual(document.activeElement.className, "todo-check", "항목이 숨겨져도 포커스는 체크박스에 있다");
+        assertEqual(focusedId(), "r", "숨겨진 항목 자리에 들어온 다음 항목의 체크박스로 포커스가 간다");
+        list.children[1].querySelector(".todo-check").click(); // 마지막 항목
+        assertEqual(focusedId(), "p", "마지막 항목이 숨겨지면 이전 항목의 체크박스로 포커스가 간다");
+        list.querySelector(".todo-check").click();
+        assertEqual(list.children.length, 0, "미완료 항목을 모두 체크하면 목록이 비어 있다");
+        assertEqual(document.activeElement, input, "남은 항목이 없으면 포커스는 입력창으로 간다");
       } finally {
         state.todos = prevTodos;
         state.filter = prevFilter;
         stub.hidden = true;
         tabs.textContent = "";
+        document.getElementById("status-filter").textContent = "";
         select.textContent = "";
         document.getElementById("todo-input").value = "";
         document.getElementById("due-input").value = "";

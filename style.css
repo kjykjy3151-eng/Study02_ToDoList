@@ -145,6 +145,13 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+/* 인라인 수정 중에는 텍스트 자리를 입력창이 차지한다. min-width: 0 이 없으면 긴 입력창이 행 밖으로 밀려난다. */
+.todo-edit {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+}
+
 .is-done .todo-text {
   text-decoration: line-through;
   color: var(--muted);
