@@ -149,6 +149,120 @@
 
       localStorage.removeItem(K);
       localStorage.removeItem(KB);
+
+      // renderItem은 <li> 요소를 돌려주는 순수한 DOM 생성 함수다
+      const el = renderItem(t({text: '<img src=x onerror="window.__xss=1">'}));
+      assertEqual(el.querySelector(".todo-text").textContent, '<img src=x onerror="window.__xss=1">',
+        "특수문자가 포함된 텍스트를 그대로 표시한다");
+      assertEqual(el.querySelector(".todo-text").querySelector("img"), null,
+        "사용자 텍스트를 마크업으로 해석하지 않는다");
+      assertEqual(window.__xss, undefined, "렌더 과정에서 사용자 텍스트의 스크립트가 실행되지 않는다");
+
+      // renderItem — 접근성 이름, 마감일 표기, 완료 표시
+      const named = renderItem(t({text: "보고서"}));
+      assertEqual(named.querySelector(".todo-check").getAttribute("aria-label"), "보고서",
+        "체크박스는 할 일 내용을 접근성 이름으로 가진다");
+      assertEqual(named.querySelector(".todo-delete").getAttribute("aria-label"), "삭제: 보고서",
+        "삭제 버튼은 어느 항목을 지우는지 접근성 이름으로 구분한다");
+      assertEqual(renderItem(t({dueDate: "2026-10-07"})).querySelector(".todo-due").textContent, "10/07",
+        "마감일은 MM/DD 로 줄여 표시한다");
+      assertEqual(renderItem(t({dueDate: null})).querySelector(".todo-due").textContent, "",
+        "마감일이 없으면 마감일 칸을 비운다");
+      const doneEl = renderItem(t({done: true}));
+      assertEqual(doneEl.classList.contains("is-done") && doneEl.querySelector(".todo-check").checked, true,
+        "완료 항목은 is-done 클래스와 체크 상태를 가진다");
+
+      // render/addTodo/toggleTodo/deleteTodo — 전역 상태를 쓰므로 끝나면 되돌린다.
+      const prevTodos = state.todos;
+      const prevFilter = state.filter;
+      const tabs = document.getElementById("category-tabs");
+      const select = document.getElementById("category-select");
+      for (const c of ["전체", "업무", "개인", "공부"]) {
+        const b = document.createElement("button");
+        b.dataset.category = c;
+        tabs.appendChild(b);
+      }
+      for (const c of ["업무", "개인"]) select.appendChild(new Option(c, c));
+      try {
+        const list = document.getElementById("todo-list");
+        const empty = document.getElementById("empty-state");
+        const countText = () => document.getElementById("progress-count").textContent;
+        const tabText = c => tabs.querySelector('[data-category="' + c + '"]').textContent;
+
+        state.todos = [];
+        state.filter = {category: "전체", status: "전체"};
+        render();
+        assertEqual(empty.hidden, false, "항목이 하나도 없으면 빈 상태 안내를 보인다");
+        const emptyAllText = empty.textContent;
+        assertEqual(countText(), "0 / 0", "항목이 없으면 진행 숫자는 0 / 0 이다");
+
+        addTodo("   ", "개인", null);
+        assertEqual(state.todos.length, 0, "공백만 있는 텍스트는 추가하지 않는다");
+
+        addTodo("  공부하기  ", "공부", "");
+        assertEqual(state.todos[0].text, "공부하기", "추가할 때 텍스트 앞뒤 공백을 지운다");
+        assertEqual(state.todos[0].dueDate, null, "빈 마감일 입력은 null 로 저장한다");
+        assertEqual(loadTodos().length, 1, "추가하면 저장소에도 반영된다");
+        assertEqual(list.children.length, 1, "추가하면 목록에 그려진다");
+        assertEqual(empty.hidden, true, "항목이 있으면 빈 상태 안내를 숨긴다");
+
+        addTodo("운동", "개인", "2026-10-07");
+        assertEqual(state.todos[1].dueDate, "2026-10-07", "입력한 마감일은 그대로 저장한다");
+
+        // 이벤트 위임: 실제 클릭으로 토글한다 (정렬상 마감일 있는 항목이 위).
+        list.querySelector(".todo-check").click();
+        assertEqual(state.todos[1].done, true, "체크박스 클릭이 완료 상태를 바꾼다");
+        assertEqual(loadTodos()[1].done, true, "토글 결과가 저장소에 반영된다");
+        assertEqual(countText(), "1 / 2", "토글하면 진행 숫자가 갱신된다");
+        assertEqual(tabText("개인"), "개인 1/1", "토글하면 카테고리 탭의 n/m 이 갱신된다");
+        assertEqual(tabText("전체"), "전체 2", "전체 탭은 전체 개수만 표시한다");
+        assertEqual(list.lastElementChild.dataset.id, state.todos[1].id, "완료 항목은 목록 아래로 내려간다");
+
+        // 필터를 걸어도 진행률과 탭은 전체 데이터 기준이다.
+        state.filter = {category: "업무", status: "전체"};
+        render();
+        assertEqual(list.children.length, 0, "필터 결과가 없으면 목록이 비어 있다");
+        assertEqual(countText(), "1 / 2", "필터를 걸어도 진행 숫자는 전체 데이터 기준이다");
+        assertEqual(tabText("공부"), "공부 0/1", "필터를 걸어도 탭의 n/m 은 전체 데이터 기준이다");
+        assertEqual(empty.hidden, false, "필터 때문에 비면 빈 상태 안내를 보인다");
+        assertEqual(empty.textContent !== emptyAllText, true, "필터 때문에 빈 문구는 전체가 빈 문구와 다르다");
+        state.filter = {category: "전체", status: "전체"};
+        render();
+
+        // 삭제도 실제 클릭으로.
+        const keepId = state.todos[1].id; // 맨 위는 마감일 없는 "공부하기"(미완료)이므로 "운동"이 남아야 한다.
+        list.querySelector(".todo-delete").click();
+        assertEqual(state.todos.length, 1, "삭제 버튼 클릭이 항목 하나를 지운다");
+        assertEqual(state.todos[0].id, keepId, "해당 항목만 지워지고 나머지는 남는다");
+        assertEqual(loadTodos().length, 1, "삭제 결과가 저장소에 반영된다");
+
+        // 폼 제출: 입력창과 마감일은 비우고 카테고리는 유지한다.
+        const input = document.getElementById("todo-input");
+        const due = document.getElementById("due-input");
+        select.value = "업무";
+        input.value = "폼으로 추가";
+        due.value = "2026-10-09";
+        document.getElementById("todo-form").requestSubmit();
+        assertEqual(state.todos.some(x => x.text === "폼으로 추가" && x.category === "업무" && x.dueDate === "2026-10-09"), true,
+          "폼 제출이 입력값으로 항목을 추가한다");
+        assertEqual(input.value, "", "추가 후 입력창을 비운다");
+        assertEqual(due.value, "", "추가 후 마감일 입력을 비운다");
+        assertEqual(select.value, "업무", "추가 후 카테고리 선택은 유지한다");
+
+        input.value = "   ";
+        due.value = "2026-10-10";
+        const before = state.todos.length;
+        document.getElementById("todo-form").requestSubmit();
+        assertEqual(state.todos.length, before, "공백만 입력한 폼 제출은 아무것도 추가하지 않는다");
+      } finally {
+        state.todos = prevTodos;
+        state.filter = prevFilter;
+        tabs.textContent = "";
+        select.textContent = "";
+        document.getElementById("todo-input").value = "";
+        document.getElementById("due-input").value = "";
+        render();
+      }
     }
 
     // 하네스는 실제 사용자 데이터(todos.v1)를 보호한다.

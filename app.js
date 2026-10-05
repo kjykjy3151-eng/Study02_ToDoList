@@ -25,6 +25,11 @@ function saveTodos(todos, key = STORAGE_KEY) {
 
 // ===== 상태 =====
 
+const state = {
+  todos: [],
+  filter: { category: "전체", status: "전체" },
+};
+
 // ===== 순수 함수 =====
 
 function makeId() {
@@ -67,4 +72,123 @@ function countByCategory(todos, category) {
 
 // ===== 렌더 =====
 
+// <li> 하나를 만들어 돌려주기만 한다. 사용자 데이터는 전부 textContent/속성으로 넣는다(innerHTML 금지).
+function renderItem(todo) {
+  const li = document.createElement("li");
+  li.className = todo.done ? "todo-item is-done" : "todo-item";
+  li.dataset.id = todo.id;
+
+  const check = document.createElement("input");
+  check.type = "checkbox";
+  check.className = "todo-check";
+  check.checked = todo.done;
+  check.setAttribute("aria-label", todo.text);
+
+  const text = document.createElement("span");
+  text.className = "todo-text";
+  text.textContent = todo.text;
+
+  const category = document.createElement("span");
+  category.className = "todo-category";
+  category.textContent = todo.category;
+
+  // "YYYY-MM-DD" 를 "MM/DD" 로 줄여 보여 준다. 마감일이 없으면 비운다.
+  const due = document.createElement("span");
+  due.className = "todo-due";
+  due.textContent = todo.dueDate === null ? "" : todo.dueDate.slice(5).replace("-", "/");
+
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "todo-delete";
+  del.setAttribute("aria-label", "삭제: " + todo.text);
+  del.textContent = "✕";
+
+  li.append(check, text, category, due, del);
+  return li;
+}
+
+function render() {
+  // 1. 목록: 필터, 정렬을 거친 항목만 그린다.
+  const visible = sortTodos(filterTodos(state.todos, state.filter));
+  const list = document.getElementById("todo-list");
+  list.textContent = "";
+  for (const todo of visible) list.appendChild(renderItem(todo));
+
+  // 2. 진행률: 필터와 무관하게 항상 전체 데이터로 계산한다.
+  const progress = calcProgress(state.todos);
+  document.getElementById("progress-fill").style.width = progress.percent + "%";
+  document.getElementById("progress-count").textContent = progress.done + " / " + progress.total;
+  document.getElementById("progress-percent").textContent = progress.percent + "%";
+
+  // 3. 카테고리 탭: 전체 탭은 전체 개수만, 나머지는 완료/전체.
+  for (const button of document.querySelectorAll("#category-tabs [data-category]")) {
+    const category = button.dataset.category;
+    if (category === "전체") {
+      button.textContent = "전체 " + state.todos.length;
+    } else {
+      const count = countByCategory(state.todos, category);
+      button.textContent = category + " " + count.done + "/" + count.total;
+    }
+  }
+
+  // 4. 빈 상태: 데이터 자체가 없을 때와 필터 때문에 비었을 때 문구를 구분한다.
+  const empty = document.getElementById("empty-state");
+  empty.hidden = visible.length > 0;
+  empty.textContent = state.todos.length === 0
+    ? "아직 할 일이 없습니다. 위에서 추가해 보세요."
+    : "조건에 맞는 할 일이 없습니다.";
+}
+
+// 변경 함수는 모두 상태 변경, 저장, 다시 그리기 순서로 끝낸다.
+function addTodo(text, category, dueDate) {
+  const trimmed = text.trim();
+  if (trimmed === "") return;
+  state.todos.push({
+    id: makeId(),
+    text: trimmed,
+    category,
+    done: false,
+    dueDate: dueDate || null, // 날짜 입력은 비어 있으면 ""를 주므로 null로 맞춘다.
+    createdAt: Date.now(),
+  });
+  saveTodos(state.todos);
+  render();
+}
+
+function toggleTodo(id) {
+  const todo = state.todos.find(item => item.id === id);
+  if (!todo) return;
+  todo.done = !todo.done;
+  saveTodos(state.todos);
+  render();
+}
+
+function deleteTodo(id) {
+  state.todos = state.todos.filter(item => item.id !== id);
+  saveTodos(state.todos);
+  render();
+}
+
 // ===== 이벤트 =====
+
+document.getElementById("todo-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const input = document.getElementById("todo-input");
+  if (input.value.trim() === "") return; // 공백만 입력하면 입력창과 마감일을 그대로 둔다.
+  addTodo(input.value, document.getElementById("category-select").value, document.getElementById("due-input").value);
+  input.value = "";
+  document.getElementById("due-input").value = "";
+  input.focus();
+});
+
+// 항목은 매번 다시 그려지므로 리스너는 목록 하나에만 붙인다.
+document.getElementById("todo-list").addEventListener("click", event => {
+  const item = event.target.closest(".todo-item");
+  if (!item) return;
+  if (event.target.classList.contains("todo-check")) toggleTodo(item.dataset.id);
+  else if (event.target.classList.contains("todo-delete")) deleteTodo(item.dataset.id);
+});
+
+// 시작: 저장된 데이터를 불러와 첫 화면을 그린다. 항상 app.js 맨 아래에 둔다.
+state.todos = loadTodos();
+render();
