@@ -118,6 +118,37 @@
 
       // countByCategory
       assertDeepEqual(countByCategory(sample, "업무"), {done:1, total:2}, "카테고리별 집계는 해당 카테고리만 센다");
+
+      // 저장 계층 — 사용자 데이터(todos.v1)를 건드리지 않도록 별도 키를 쓴다.
+      const K = "todos.test";
+      const KB = K + ".broken";
+
+      // 왕복
+      localStorage.removeItem(K);
+      saveTodos([t({id:"a"})], K);
+      assertDeepEqual(loadTodos(K).map(x => x.id), ["a"], "저장한 내용을 그대로 읽어온다");
+
+      // 키가 없으면 빈 배열
+      localStorage.removeItem(K);
+      assertDeepEqual(loadTodos(K), [], "저장된 데이터가 없으면 빈 배열을 돌려준다");
+
+      // 파싱 실패 → 빈 배열 + 손상값 보관
+      localStorage.setItem(K, "{{{");
+      localStorage.removeItem(KB);
+      assertDeepEqual(loadTodos(K), [], "JSON이 깨졌으면 빈 배열로 시작한다");
+      assertEqual(localStorage.getItem(KB), "{{{", "깨진 값은 broken 키로 옮겨 보관한다");
+      assertEqual(localStorage.getItem(K), null, "깨진 값은 원래 키에서 제거한다");
+
+      // 배열이 아닌 유효 JSON → 같은 처리
+      for (const bad of ["{}", '"abc"', "null", "42"]) {
+        localStorage.setItem(K, bad);
+        localStorage.removeItem(KB);
+        assertDeepEqual(loadTodos(K), [], `배열이 아닌 ${bad} 는 빈 배열로 처리한다`);
+        assertEqual(localStorage.getItem(KB), bad, `배열이 아닌 ${bad} 도 broken 키로 옮긴다`);
+      }
+
+      localStorage.removeItem(K);
+      localStorage.removeItem(KB);
     }
 
     // 하네스는 실제 사용자 데이터(todos.v1)를 보호한다.

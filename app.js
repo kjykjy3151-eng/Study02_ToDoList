@@ -2,6 +2,28 @@
 
 // ===== 저장 =====
 
+const STORAGE_KEY = "todos.v1";
+const BROKEN_KEY = "todos.v1.broken";
+
+// 저장된 값이 없으면 빈 배열. 파싱에 실패하거나 배열이 아니면 원본을 broken 키로 옮기고 빈 배열로 시작한다.
+function loadTodos(key = STORAGE_KEY) {
+  const raw = localStorage.getItem(key);
+  if (raw === null) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch (err) {
+    // 아래에서 손상값으로 처리한다.
+  }
+  localStorage.setItem(key + ".broken", raw);
+  localStorage.removeItem(key);
+  return [];
+}
+
+function saveTodos(todos, key = STORAGE_KEY) {
+  localStorage.setItem(key, JSON.stringify(todos));
+}
+
 // ===== 상태 =====
 
 // ===== 순수 함수 =====
