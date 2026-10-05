@@ -1,0 +1,532 @@
+<!-- 생성: 2026-10-05 20:42 KST -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>할 일 앱 테스트</title>
+  <style>
+    body { font-family: sans-serif; margin: 24px; }
+    #summary { font-weight: bold; margin-bottom: 12px; }
+    #summary.is-fail { color: #c0392b; }
+    #summary.is-pass { color: #1e8449; }
+    .fail { color: #c0392b; margin: 8px 0; white-space: pre-wrap; }
+    .pass { color: #1e8449; margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <h1>할 일 앱 테스트</h1>
+  <div id="summary"></div>
+  <div id="results"></div>
+
+  <!-- 스텁 마크업: Task 4부터 render()를 호출하는 테스트가 null 참조 없이 돌도록 미리 둔다. -->
+  <div hidden>
+    <div id="progress-fill"></div>
+    <span id="progress-count"></span>
+    <span id="progress-percent"></span>
+    <form id="todo-form"></form>
+    <input id="todo-input">
+    <select id="category-select"></select>
+    <input id="due-input" type="date">
+    <div id="category-tabs"></div>
+    <div id="status-filter"></div>
+    <ul id="todo-list"></ul>
+    <p id="empty-state"></p>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    let passed = 0;
+    let failed = 0;
+
+    function report(ok, message) {
+      const line = document.createElement("div");
+      line.className = ok ? "pass" : "fail";
+      line.textContent = message;
+      document.getElementById("results").appendChild(line);
+    }
+
+    function assertEqual(actual, expected, name) {
+      if (actual === expected) {
+        passed++;
+        report(true, "통과: " + name);
+      } else {
+        failed++;
+        report(false, "실패: " + name + "\n  기대값: " + JSON.stringify(expected) + "\n  실제값: " + JSON.stringify(actual));
+      }
+    }
+
+    function assertDeepEqual(actual, expected, name) {
+      const a = JSON.stringify(actual);
+      const e = JSON.stringify(expected);
+      if (a === e) {
+        passed++;
+        report(true, "통과: " + name);
+      } else {
+        failed++;
+        report(false, "실패: " + name + "\n  기대값: " + e + "\n  실제값: " + a);
+      }
+    }
+
+    // 테스트용 Todo 생성 헬퍼
+    function t(overrides) {
+      return Object.assign(
+        { id: "x", text: "할 일", category: "개인", done: false, dueDate: null, createdAt: 0 },
+        overrides
+      );
+    }
+
+    function runTests() {
+      // makeId
+      assertEqual(typeof makeId(), "string", "makeId는 문자열을 돌려준다");
+      const ids = new Set(Array.from({length: 1000}, makeId));
+      assertEqual(ids.size, 1000, "makeId는 연속 1000회 호출에도 중복되지 않는다");
+
+      // sortTodos — 미완료가 완료보다 먼저
+      assertDeepEqual(
+        sortTodos([t({id:"a", done:true}), t({id:"b", done:false})]).map(x => x.id),
+        ["b", "a"], "미완료가 완료보다 앞에 온다");
+
+      // sortTodos — 마감일 빠른 순, 없는 항목은 뒤
+      assertDeepEqual(
+        sortTodos([t({id:"a", dueDate:null}), t({id:"b", dueDate:"2026-10-09"}), t({id:"c", dueDate:"2026-10-07"})]).map(x => x.id),
+        ["c", "b", "a"], "마감일이 빠른 순, 없는 항목은 뒤로 간다");
+
+      // sortTodos — 마감일이 같으면 나중에 추가한 것이 위
+      assertDeepEqual(
+        sortTodos([t({id:"a", createdAt:100}), t({id:"b", createdAt:200})]).map(x => x.id),
+        ["b", "a"], "마감일이 없으면 나중에 추가한 것이 위에 온다");
+
+      // sortTodos — 원본 불변
+      const src = [t({id:"a", done:true}), t({id:"b", done:false})];
+      sortTodos(src);
+      assertDeepEqual(src.map(x => x.id), ["a", "b"], "sortTodos는 원본 배열을 바꾸지 않는다");
+
+      // filterTodos — 두 축 AND
+      const sample = [
+        t({id:"a", category:"업무", done:false}),
+        t({id:"b", category:"업무", done:true}),
+        t({id:"c", category:"개인", done:false}),
+      ];
+      assertDeepEqual(filterTodos(sample, {category:"전체", status:"전체"}).map(x => x.id), ["a","b","c"], "전체/전체는 모두 통과한다");
+      assertDeepEqual(filterTodos(sample, {category:"업무", status:"미완료"}).map(x => x.id), ["a"], "카테고리와 상태는 AND로 적용된다");
+      assertDeepEqual(filterTodos(sample, {category:"전체", status:"완료"}).map(x => x.id), ["b"], "상태 완료는 완료 항목만 남긴다");
+      assertDeepEqual(filterTodos(sample, {category:"공부", status:"전체"}).map(x => x.id), [], "해당 카테고리가 없으면 빈 배열이다");
+
+      // calcProgress
+      assertDeepEqual(calcProgress(sample), {done:1, total:3, percent:33}, "진행률은 백분율을 정수로 내림한다");
+      assertDeepEqual(calcProgress([]), {done:0, total:0, percent:0}, "항목이 없으면 0/0, 0%다");
+
+      // countByCategory
+      assertDeepEqual(countByCategory(sample, "업무"), {done:1, total:2}, "카테고리별 집계는 해당 카테고리만 센다");
+
+      // 저장 계층 — 사용자 데이터(todos.v1)를 건드리지 않도록 별도 키를 쓴다.
+      const K = "todos.test";
+      const KB = K + ".broken";
+
+      // 왕복
+      localStorage.removeItem(K);
+      saveTodos([t({id:"a"})], K);
+      assertDeepEqual(loadTodos(K).map(x => x.id), ["a"], "저장한 내용을 그대로 읽어온다");
+
+      // 키가 없으면 빈 배열
+      localStorage.removeItem(K);
+      assertDeepEqual(loadTodos(K), [], "저장된 데이터가 없으면 빈 배열을 돌려준다");
+
+      // 파싱 실패 → 빈 배열 + 손상값 보관
+      localStorage.setItem(K, "{{{");
+      localStorage.removeItem(KB);
+      assertDeepEqual(loadTodos(K), [], "JSON이 깨졌으면 빈 배열로 시작한다");
+      assertEqual(localStorage.getItem(KB), "{{{", "깨진 값은 broken 키로 옮겨 보관한다");
+      assertEqual(localStorage.getItem(K), null, "깨진 값은 원래 키에서 제거한다");
+
+      // 배열이 아닌 유효 JSON → 같은 처리
+      for (const bad of ["{}", '"abc"', "null", "42"]) {
+        localStorage.setItem(K, bad);
+        localStorage.removeItem(KB);
+        assertDeepEqual(loadTodos(K), [], `배열이 아닌 ${bad} 는 빈 배열로 처리한다`);
+        assertEqual(localStorage.getItem(KB), bad, `배열이 아닌 ${bad} 도 broken 키로 옮긴다`);
+      }
+
+      // 배열 안에 형식이 맞지 않는 요소가 섞여 있으면 그 요소만 버리고 나머지는 살린다.
+      const good = t({id: "g"});
+      localStorage.removeItem(KB);
+      localStorage.setItem(K, JSON.stringify([good, null]));
+      assertDeepEqual(loadTodos(K), [good], "[정상, null] 에서 정상 항목만 돌려준다");
+      assertEqual(localStorage.getItem(KB), null, "요소 단위 손상은 broken 키로 옮기지 않는다");
+      assertEqual(localStorage.getItem(K) !== null, true, "요소 단위 손상은 원래 키를 지우지 않는다");
+      const badElements = [42, "문자열", [], {}, t({id: 1}), t({text: null}), t({done: "true"}), t({dueDate: undefined}), t({dueDate: 20261007})];
+      localStorage.setItem(K, JSON.stringify([good].concat(badElements)));
+      assertDeepEqual(loadTodos(K).map(x => x.id), ["g"], "id, text, done, dueDate 형식이 맞지 않는 요소는 모두 버린다");
+      localStorage.setItem(K, JSON.stringify([good, t({id: "nc", category: undefined})]));
+      assertDeepEqual(loadTodos(K).map(x => x.id), ["g"], "category 가 없는 요소는 버린다");
+      localStorage.setItem(K, JSON.stringify([good, t({id: "bc", category: "취미"}), t({id: "nc", category: 3})]));
+      assertDeepEqual(loadTodos(K).map(x => x.id), ["g"], "category 가 세 카테고리 중 하나가 아닌 요소는 버린다");
+
+      localStorage.removeItem(K);
+      localStorage.removeItem(KB);
+
+      // renderItem은 <li> 요소를 돌려주는 순수한 DOM 생성 함수다
+      const el = renderItem(t({text: '<img src=x onerror="window.__xss=1">'}));
+      assertEqual(el.querySelector(".todo-text").textContent, '<img src=x onerror="window.__xss=1">',
+        "특수문자가 포함된 텍스트를 그대로 표시한다");
+      assertEqual(el.querySelector(".todo-text").querySelector("img"), null,
+        "사용자 텍스트를 마크업으로 해석하지 않는다");
+      // onerror 는 비동기로 실행되므로 동기 테스트에서 window.__xss 를 확인해도 아무것도 검증하지 못한다.
+      // 마크업으로 해석되지 않았음은 위의 img 부재 검사로 확인한다.
+
+      // renderItem — 접근성 이름, 마감일 표기, 완료 표시
+      const named = renderItem(t({text: "보고서"}));
+      assertEqual(named.querySelector(".todo-check").getAttribute("aria-label"), "보고서",
+        "체크박스는 할 일 내용을 접근성 이름으로 가진다");
+      assertEqual(named.querySelector(".todo-delete").getAttribute("aria-label"), "삭제: 보고서",
+        "삭제 버튼은 어느 항목을 지우는지 접근성 이름으로 구분한다");
+      assertEqual(renderItem(t({category: "공부"})).querySelector(".todo-category").textContent, "공부",
+        "항목은 카테고리를 표시한다");
+      assertEqual(renderItem(t({dueDate: "2026-10-07"})).querySelector(".todo-due").textContent, "10/07",
+        "마감일은 MM/DD 로 줄여 표시한다");
+      assertEqual(renderItem(t({dueDate: null})).querySelector(".todo-due").textContent, "",
+        "마감일이 없으면 마감일 칸을 비운다");
+      const doneEl = renderItem(t({done: true}));
+      assertEqual(doneEl.classList.contains("is-done") && doneEl.querySelector(".todo-check").checked, true,
+        "완료 항목은 is-done 클래스와 체크 상태를 가진다");
+
+      // render/addTodo/toggleTodo/deleteTodo — 전역 상태를 쓰므로 끝나면 되돌린다.
+      const prevTodos = state.todos;
+      const prevFilter = state.filter;
+      const tabs = document.getElementById("category-tabs");
+      const select = document.getElementById("category-select");
+      for (const c of ["전체", "업무", "개인", "공부"]) {
+        const b = document.createElement("button");
+        b.dataset.category = c;
+        tabs.appendChild(b);
+      }
+      for (const c of ["업무", "개인"]) select.appendChild(new Option(c, c));
+      const stub = document.getElementById("todo-list").parentElement;
+      stub.hidden = false; // display:none 안의 요소는 포커스를 받지 못하므로 포커스 테스트 동안만 보이게 한다.
+      try {
+        const list = document.getElementById("todo-list");
+        const empty = document.getElementById("empty-state");
+        const countText = () => document.getElementById("progress-count").textContent;
+        const tabText = c => tabs.querySelector('[data-category="' + c + '"]').textContent;
+
+        state.todos = [];
+        state.filter = {category: "전체", status: "전체"};
+        render();
+        assertEqual(empty.hidden, false, "항목이 하나도 없으면 빈 상태 안내를 보인다");
+        const emptyAllText = empty.textContent;
+        assertEqual(countText(), "0 / 0", "항목이 없으면 진행 숫자는 0 / 0 이다");
+
+        addTodo("   ", "개인", null);
+        assertEqual(state.todos.length, 0, "공백만 있는 텍스트는 추가하지 않는다");
+
+        addTodo("  공부하기  ", "공부", "");
+        assertEqual(state.todos[0].text, "공부하기", "추가할 때 텍스트 앞뒤 공백을 지운다");
+        assertEqual(state.todos[0].dueDate, null, "빈 마감일 입력은 null 로 저장한다");
+        assertEqual(loadTodos().length, 1, "추가하면 저장소에도 반영된다");
+        assertEqual(list.children.length, 1, "추가하면 목록에 그려진다");
+        assertEqual(empty.hidden, true, "항목이 있으면 빈 상태 안내를 숨긴다");
+
+        addTodo("운동", "개인", "2026-10-07");
+        assertEqual(state.todos[1].dueDate, "2026-10-07", "입력한 마감일은 그대로 저장한다");
+
+        // 이벤트 위임: 실제 클릭으로 토글한다 (정렬상 마감일 있는 항목이 위).
+        list.querySelector(".todo-check").click();
+        assertEqual(state.todos[1].done, true, "체크박스 클릭이 완료 상태를 바꾼다");
+        assertEqual(loadTodos()[1].done, true, "토글 결과가 저장소에 반영된다");
+        assertEqual(countText(), "1 / 2", "토글하면 진행 숫자가 갱신된다");
+        assertEqual(tabText("개인"), "개인 1/1", "토글하면 카테고리 탭의 n/m 이 갱신된다");
+        assertEqual(tabText("전체"), "전체 2", "전체 탭은 전체 개수만 표시한다");
+        assertEqual(list.lastElementChild.dataset.id, state.todos[1].id, "완료 항목은 목록 아래로 내려간다");
+
+        // 필터를 걸어도 진행률과 탭은 전체 데이터 기준이다.
+        state.filter = {category: "업무", status: "전체"};
+        render();
+        assertEqual(list.children.length, 0, "필터 결과가 없으면 목록이 비어 있다");
+        assertEqual(countText(), "1 / 2", "필터를 걸어도 진행 숫자는 전체 데이터 기준이다");
+        assertEqual(tabText("공부"), "공부 0/1", "필터를 걸어도 탭의 n/m 은 전체 데이터 기준이다");
+        assertEqual(empty.hidden, false, "필터 때문에 비면 빈 상태 안내를 보인다");
+        assertEqual(empty.textContent !== emptyAllText, true, "필터 때문에 빈 문구는 전체가 빈 문구와 다르다");
+        state.filter = {category: "전체", status: "전체"};
+        render();
+
+        // 삭제도 실제 클릭으로.
+        const keepId = state.todos[1].id; // 맨 위는 마감일 없는 "공부하기"(미완료)이므로 "운동"이 남아야 한다.
+        list.querySelector(".todo-delete").click();
+        assertEqual(state.todos.length, 1, "삭제 버튼 클릭이 항목 하나를 지운다");
+        assertEqual(state.todos[0].id, keepId, "해당 항목만 지워지고 나머지는 남는다");
+        assertEqual(loadTodos().length, 1, "삭제 결과가 저장소에 반영된다");
+
+        // 폼 제출: 입력창과 마감일은 비우고 카테고리는 유지한다.
+        const input = document.getElementById("todo-input");
+        const due = document.getElementById("due-input");
+        select.value = "업무";
+        input.value = "폼으로 추가";
+        due.value = "2026-10-09";
+        select.focus(); // 포커스가 입력창이 아닌 곳에 있어도 추가 후 입력창으로 돌아와야 한다.
+        document.getElementById("todo-form").requestSubmit();
+        assertEqual(state.todos.some(x => x.text === "폼으로 추가" && x.category === "업무" && x.dueDate === "2026-10-09"), true,
+          "폼 제출이 입력값으로 항목을 추가한다");
+        assertEqual(input.value, "", "추가 후 입력창을 비운다");
+        assertEqual(due.value, "", "추가 후 마감일 입력을 비운다");
+        assertEqual(select.value, "업무", "추가 후 카테고리 선택은 유지한다");
+        assertEqual(document.activeElement, input, "추가 후 포커스는 입력창에 있다");
+
+        input.value = "   ";
+        due.value = "2026-10-10";
+        const before = state.todos.length;
+        select.focus(); // 추가 버튼을 눌러 제출한 경우처럼 포커스가 입력창 밖에 있다.
+        document.getElementById("todo-form").requestSubmit();
+        assertEqual(state.todos.length, before, "공백만 입력한 폼 제출은 아무것도 추가하지 않는다");
+        assertEqual(due.value, "2026-10-10", "공백만 입력한 폼 제출은 마감일 입력을 그대로 둔다");
+        assertEqual(document.activeElement, input, "공백만 입력한 폼 제출 후에도 포커스는 입력창에 있다");
+
+        // 키보드 포커스: 전체를 다시 그려도 사용자가 있던 자리로 돌려놓는다. 마감일로 순서를 고정한다.
+        state.todos = [];
+        addTodo("가", "개인", "2026-10-01");
+        addTodo("나", "개인", "2026-10-02");
+        addTodo("다", "개인", "2026-10-03");
+        const itemId = n => list.children[n].dataset.id;
+        const focusedId = () => document.activeElement.closest(".todo-item") && document.activeElement.closest(".todo-item").dataset.id;
+
+        const midId = itemId(1);
+        list.children[1].querySelector(".todo-check").focus();
+        list.children[1].querySelector(".todo-check").click();
+        assertEqual(document.activeElement.className, "todo-check", "토글 후 포커스는 체크박스에 있다");
+        assertEqual(focusedId(), midId, "토글 후 포커스는 같은 항목의 체크박스로 돌아온다");
+
+        list.children[0].querySelector(".todo-delete").focus();
+        const secondId = itemId(1);
+        list.children[0].querySelector(".todo-delete").click();
+        assertEqual(document.activeElement.className, "todo-delete", "삭제 후 포커스는 삭제 버튼에 있다");
+        assertEqual(focusedId(), secondId, "맨 앞 항목을 지우면 다음 항목의 삭제 버튼에 포커스가 간다");
+
+        const beforeLastId = itemId(list.children.length - 2);
+        list.lastElementChild.querySelector(".todo-delete").focus();
+        list.lastElementChild.querySelector(".todo-delete").click();
+        assertEqual(focusedId(), beforeLastId, "마지막 항목을 지우면 이전 항목의 삭제 버튼에 포커스가 간다");
+
+        list.querySelector(".todo-delete").focus();
+        list.querySelector(".todo-delete").click();
+        assertEqual(list.children.length, 0, "남은 항목을 모두 지우면 목록이 비어 있다");
+        assertEqual(document.activeElement, input, "목록이 비면 포커스는 입력창으로 간다");
+
+        // 수정: 빈 텍스트는 거부하고, 저장할 때는 앞뒤 공백을 지운다.
+        state.todos = [t({id: "a", text: "원래 내용"})];
+        updateTodoText("a", "   ");
+        assertEqual(state.todos[0].text, "원래 내용", "빈 내용으로는 저장하지 않고 원래 텍스트를 유지한다");
+        updateTodoText("a", "  바뀐 내용  ");
+        assertEqual(state.todos[0].text, "바뀐 내용", "저장할 때 앞뒤 공백을 제거한다");
+        assertEqual(loadTodos()[0].text, "바뀐 내용", "수정 결과가 저장소에 반영된다");
+
+        // 인라인 수정: 실제 DOM 이벤트로 세 가지 종료 경로를 확인한다.
+        const keydown = (el, key) => el.dispatchEvent(new KeyboardEvent("keydown", {key, bubbles: true}));
+        const editInput = () => list.querySelector(".todo-edit");
+
+        state.todos = [t({id: "a", text: "원래 내용"})];
+        render();
+        list.querySelector(".todo-text").click();
+        assertEqual(editInput() !== null, true, "텍스트를 클릭하면 입력창으로 바뀐다");
+        assertEqual(list.querySelector(".todo-text"), null, "입력창으로 바뀌면 텍스트 span 은 사라진다");
+        assertEqual(editInput().value, "원래 내용", "입력창에 현재 텍스트가 담긴다");
+        assertEqual(document.activeElement, editInput(), "입력창에 포커스가 간다");
+        editInput().value = "엔터로 저장";
+        keydown(editInput(), "Enter");
+        assertEqual(state.todos[0].text, "엔터로 저장", "Enter 는 수정 내용을 저장한다");
+        assertEqual(editInput(), null, "Enter 후에는 입력창이 사라진다");
+        assertEqual(list.querySelector(".todo-text").textContent, "엔터로 저장", "Enter 후 새 텍스트가 보인다");
+
+        // Esc: 저장하지 않는다. 뒤따르는 blur 까지 흉내 내어 저장으로 처리되지 않는지 본다.
+        list.querySelector(".todo-text").click();
+        const escInput = editInput();
+        escInput.value = "버릴 내용";
+        // 브라우저는 포커스가 있는 입력창을 떼어낼 때 blur 를 일으킬 수 있다. 그 blur 가 render 도중에 도착하는 경우를 흉내 낸다.
+        const realRender = render;
+        render = function () {
+          escInput.dispatchEvent(new Event("blur"));
+          realRender();
+        };
+        try {
+          keydown(escInput, "Escape");
+        } finally {
+          render = realRender;
+        }
+        escInput.dispatchEvent(new Event("blur")); // render 가 끝난 뒤에 늦게 도착하는 blur
+        assertEqual(state.todos[0].text, "엔터로 저장", "Esc 는 변경을 저장하지 않는다");
+        assertEqual(loadTodos()[0].text, "엔터로 저장", "Esc 후 뒤따르는 blur 도 저장소를 바꾸지 않는다");
+        assertEqual(editInput(), null, "Esc 후에는 입력창이 사라진다");
+        assertEqual(list.querySelector(".todo-text").textContent, "엔터로 저장", "Esc 후 원래 텍스트로 돌아온다");
+
+        // blur: 저장한다.
+        list.querySelector(".todo-text").click();
+        editInput().value = "블러로 저장";
+        editInput().dispatchEvent(new Event("blur"));
+        assertEqual(state.todos[0].text, "블러로 저장", "포커스 이탈은 수정 내용을 저장한다");
+        assertEqual(editInput(), null, "포커스 이탈 후에는 입력창이 사라진다");
+
+        // 모두 지우고 Enter: 원래 텍스트를 유지하고 입력창도 닫힌다.
+        list.querySelector(".todo-text").click();
+        editInput().value = "";
+        keydown(editInput(), "Enter");
+        assertEqual(state.todos[0].text, "블러로 저장", "내용을 모두 지우고 Enter 를 눌러도 원래 텍스트가 유지된다");
+        assertEqual(editInput(), null, "빈 내용이 거부되어도 입력창은 닫힌다");
+        assertEqual(list.querySelector(".todo-text").textContent, "블러로 저장", "빈 내용이 거부되면 원래 텍스트가 다시 보인다");
+
+        // 블러로 모두 지우기: 원래 텍스트를 유지하고 입력창도 닫힌다.
+        list.querySelector(".todo-text").click();
+        editInput().value = "";
+        editInput().dispatchEvent(new Event("blur"));
+        assertEqual(state.todos[0].text, "블러로 저장", "내용을 모두 지우고 포커스를 옮겨도 원래 텍스트가 유지된다");
+        assertEqual(loadTodos()[0].text, "블러로 저장", "빈 내용으로 포커스를 옮겨도 저장소의 텍스트는 그대로다");
+        assertEqual(editInput(), null, "포커스 이탈로 빈 내용이 거부되어도 입력창은 닫힌다");
+        assertEqual(list.querySelector(".todo-text").textContent, "블러로 저장", "포커스 이탈로 빈 내용이 거부되면 원래 텍스트가 다시 보인다");
+
+        // 창이 포커스를 되찾으면 저장소를 다시 읽는다. 단, 수정 중에는 입력 중인 글을 지우지 않도록 건너뛴다.
+        const other = t({id: "z", text: "다른 탭에서 추가"});
+        state.todos = [t({id: "f", text: "포커스 테스트"})];
+        saveTodos(state.todos);
+        render();
+        list.querySelector(".todo-text").click();
+        editInput().value = "입력 중인 글";
+        localStorage.setItem("todos.v1", JSON.stringify([state.todos[0], other]));
+        window.dispatchEvent(new Event("focus"));
+        assertEqual(state.todos.length, 1, "수정 중에는 창 포커스를 되찾아도 상태를 덮어쓰지 않는다");
+        assertEqual(editInput() !== null && editInput().value === "입력 중인 글", true, "수정 중에는 창 포커스를 되찾아도 입력 중인 글이 남는다");
+        editInput().dispatchEvent(new Event("blur"));
+        localStorage.setItem("todos.v1", JSON.stringify([state.todos[0], other]));
+        window.dispatchEvent(new Event("focus"));
+        assertEqual(state.todos.length, 2, "수정 중이 아니면 창 포커스를 되찾을 때 저장소의 변경을 읽어 온다");
+        assertEqual(list.children.length, 2, "저장소에서 새로 읽은 항목이 목록에 그려진다");
+
+        // 저장소가 그대로면 다시 그리지 않는다. 다시 그리면 키보드 사용자의 포커스가 항목에서 body 로 떨어진다.
+        const keptCheck = list.children[0].querySelector(".todo-check");
+        window.dispatchEvent(new Event("focus"));
+        assertEqual(keptCheck.isConnected && list.contains(keptCheck), true, "저장소가 그대로면 창 포커스를 되찾아도 목록을 다시 그리지 않는다");
+
+        // 수정 중에 다른 항목을 누르면: 누른 요소가 살아 있어야 click 이 도착한다. (mousedown -> blur -> click 순서)
+        state.todos = [
+          t({id: "m", text: "수정할 것", dueDate: "2026-10-01"}),
+          t({id: "n", text: "누를 것", dueDate: "2026-10-02"}),
+        ];
+        render();
+        list.children[0].querySelector(".todo-text").click();
+        const otherCheck = list.children[1].querySelector(".todo-check");
+        editInput().value = "수정됨";
+        otherCheck.dispatchEvent(new MouseEvent("mousedown", {bubbles: true}));
+        editInput().dispatchEvent(new Event("blur"));
+        assertEqual(otherCheck.isConnected, true, "blur 로 수정이 끝나도 다른 항목의 체크박스는 목록에 그대로 있다");
+        otherCheck.click();
+        assertEqual(state.todos[1].done, true, "수정 중 다른 항목의 체크박스를 한 번 누르면 바로 완료된다");
+        assertEqual(state.todos[0].text, "수정됨", "그때 수정하던 내용도 저장된다");
+        assertEqual(loadTodos()[0].text, "수정됨", "수정 내용이 저장소에도 반영된다");
+
+        // 같은 방식으로 다른 항목의 텍스트를 누르면 그 항목의 수정이 시작된다.
+        render();
+        list.children[0].querySelector(".todo-text").click();
+        const otherText = list.children[1].querySelector(".todo-text");
+        otherText.dispatchEvent(new MouseEvent("mousedown", {bubbles: true}));
+        editInput().dispatchEvent(new Event("blur"));
+        otherText.click();
+        assertEqual(editInput() !== null && editInput().value === "누를 것", true, "수정 중 다른 항목의 텍스트를 한 번 누르면 그 항목의 수정이 시작된다");
+        editInput().dispatchEvent(new Event("blur"));
+
+        // blur 로 끝난 항목의 접근성 이름도 새 텍스트를 따라간다.
+        list.children[0].querySelector(".todo-text").click();
+        editInput().value = "이름 바뀜";
+        editInput().dispatchEvent(new Event("blur"));
+        assertEqual(list.children[0].querySelector(".todo-check").getAttribute("aria-label"), "이름 바뀜", "수정 후 체크박스의 접근성 이름이 새 텍스트가 된다");
+        assertEqual(list.children[0].querySelector(".todo-delete").getAttribute("aria-label"), "삭제: 이름 바뀜", "수정 후 삭제 버튼의 접근성 이름이 새 텍스트가 된다");
+
+        // 필터: 두 축은 AND 이고, 저장하지 않으며, 진행률은 전체 기준이다.
+        const statusBox = document.getElementById("status-filter");
+        for (const s of ["전체", "미완료", "완료"]) {
+          const b = document.createElement("button");
+          b.dataset.status = s;
+          statusBox.appendChild(b);
+        }
+        state.todos = [
+          t({id: "a", text: "업무 미완료", category: "업무", done: false, createdAt: 1}),
+          t({id: "b", text: "업무 완료", category: "업무", done: true, createdAt: 2}),
+          t({id: "c", text: "개인 미완료", category: "개인", done: false, createdAt: 3}),
+        ];
+        state.filter = {category: "전체", status: "전체"};
+        render();
+        const textsOf = () => Array.from(list.children).map(li => li.querySelector(".todo-text").textContent);
+        const isActive = (box, attr, value) => box.querySelector("[data-" + attr + '="' + value + '"]').classList.contains("is-active");
+
+        const savedBefore = localStorage.getItem("todos.v1");
+        localStorage.setItem("todos.v1", "센티넬");
+        setFilter({category: "업무"});
+        assertEqual(localStorage.getItem("todos.v1"), "센티넬", "setFilter 는 저장소를 건드리지 않는다");
+        if (savedBefore === null) localStorage.removeItem("todos.v1");
+        else localStorage.setItem("todos.v1", savedBefore);
+        assertDeepEqual(state.filter, {category: "업무", status: "전체"}, "setFilter 는 전달한 축만 바꾸고 다른 축은 유지한다");
+        assertEqual(list.children.length, 2, "카테고리 필터는 해당 카테고리만 보인다");
+        setFilter({status: "미완료"});
+        assertDeepEqual(textsOf(), ["업무 미완료"], "카테고리와 상태 필터는 AND 로 적용된다");
+        assertEqual(countText(), "1 / 3", "필터를 바꿔도 진행 숫자는 전체 데이터 기준이다");
+        assertEqual(isActive(tabs, "category", "업무"), true, "현재 카테고리 버튼에 is-active 가 붙는다");
+        assertEqual(isActive(tabs, "category", "전체"), false, "이전 카테고리 버튼에서는 is-active 가 빠진다");
+        assertEqual(isActive(statusBox, "status", "미완료"), true, "현재 상태 버튼에 is-active 가 붙는다");
+        assertEqual(isActive(statusBox, "status", "전체"), false, "이전 상태 버튼에서는 is-active 가 빠진다");
+
+        // 버튼 클릭이 위임으로 setFilter 에 연결된다.
+        statusBox.querySelector('[data-status="완료"]').click();
+        assertEqual(state.filter.status, "완료", "상태 버튼 클릭이 상태 필터를 바꾼다");
+        tabs.querySelector('[data-category="개인"]').click();
+        assertEqual(state.filter.category, "개인", "카테고리 버튼 클릭이 카테고리 필터를 바꾼다");
+        assertEqual(list.children.length, 0, "개인 + 완료에 맞는 항목이 없으면 목록이 비어 있다");
+
+        // 필터가 방금 토글한 항목을 숨기면 포커스를 잃지 않는다.
+        state.todos = [
+          t({id: "p", text: "가", dueDate: "2026-10-01"}),
+          t({id: "q", text: "나", dueDate: "2026-10-02"}),
+          t({id: "r", text: "다", dueDate: "2026-10-03"}),
+        ];
+        state.filter = {category: "전체", status: "미완료"};
+        render();
+        list.children[1].querySelector(".todo-check").focus();
+        list.children[1].querySelector(".todo-check").click(); // "나" 가 완료되어 미완료 필터에서 사라진다
+        assertEqual(list.children.length, 2, "미완료 필터에서 체크한 항목은 목록에서 사라진다");
+        assertEqual(document.activeElement.className, "todo-check", "항목이 숨겨져도 포커스는 체크박스에 있다");
+        assertEqual(focusedId(), "r", "숨겨진 항목 자리에 들어온 다음 항목의 체크박스로 포커스가 간다");
+        list.children[1].querySelector(".todo-check").click(); // 마지막 항목
+        assertEqual(focusedId(), "p", "마지막 항목이 숨겨지면 이전 항목의 체크박스로 포커스가 간다");
+        list.querySelector(".todo-check").click();
+        assertEqual(list.children.length, 0, "미완료 항목을 모두 체크하면 목록이 비어 있다");
+        assertEqual(document.activeElement, input, "남은 항목이 없으면 포커스는 입력창으로 간다");
+      } finally {
+        state.todos = prevTodos;
+        state.filter = prevFilter;
+        stub.hidden = true;
+        tabs.textContent = "";
+        document.getElementById("status-filter").textContent = "";
+        select.textContent = "";
+        document.getElementById("todo-input").value = "";
+        document.getElementById("due-input").value = "";
+        render();
+      }
+    }
+
+    // 하네스는 실제 사용자 데이터(todos.v1)를 보호한다.
+    // 이후 과제의 테스트가 저장 함수를 호출해도 사용자의 할 일이 덮어써지지 않도록,
+    // 실행 전에 값을 저장해 두고 실행 후(예외가 나도) 되돌린다.
+    const savedTodos = localStorage.getItem("todos.v1");
+    try {
+      runTests();
+    } catch (err) {
+      failed++;
+      report(false, "실패: 테스트 실행 중 예외가 발생했다.\n  " + err);
+    } finally {
+      if (savedTodos === null) {
+        localStorage.removeItem("todos.v1");
+      } else {
+        localStorage.setItem("todos.v1", savedTodos);
+      }
+    }
+
+    const summary = document.getElementById("summary");
+    summary.textContent = "통과 " + passed + "건, 실패 " + failed + "건";
+    summary.className = failed === 0 ? "is-pass" : "is-fail";
+  </script>
+</body>
+</html>
