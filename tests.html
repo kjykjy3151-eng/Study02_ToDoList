@@ -1,0 +1,145 @@
+<!-- 생성: 2026-10-05 20:42 KST -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>할 일 앱 테스트</title>
+  <style>
+    body { font-family: sans-serif; margin: 24px; }
+    #summary { font-weight: bold; margin-bottom: 12px; }
+    #summary.is-fail { color: #c0392b; }
+    #summary.is-pass { color: #1e8449; }
+    .fail { color: #c0392b; margin: 8px 0; white-space: pre-wrap; }
+    .pass { color: #1e8449; margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <h1>할 일 앱 테스트</h1>
+  <div id="summary"></div>
+  <div id="results"></div>
+
+  <!-- 스텁 마크업: Task 4부터 render()를 호출하는 테스트가 null 참조 없이 돌도록 미리 둔다. -->
+  <div hidden>
+    <div id="progress-fill"></div>
+    <span id="progress-count"></span>
+    <span id="progress-percent"></span>
+    <form id="todo-form"></form>
+    <input id="todo-input">
+    <select id="category-select"></select>
+    <input id="due-input" type="date">
+    <div id="category-tabs"></div>
+    <div id="status-filter"></div>
+    <ul id="todo-list"></ul>
+    <p id="empty-state"></p>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    let passed = 0;
+    let failed = 0;
+
+    function report(ok, message) {
+      const line = document.createElement("div");
+      line.className = ok ? "pass" : "fail";
+      line.textContent = message;
+      document.getElementById("results").appendChild(line);
+    }
+
+    function assertEqual(actual, expected, name) {
+      if (actual === expected) {
+        passed++;
+        report(true, "통과: " + name);
+      } else {
+        failed++;
+        report(false, "실패: " + name + "\n  기대값: " + JSON.stringify(expected) + "\n  실제값: " + JSON.stringify(actual));
+      }
+    }
+
+    function assertDeepEqual(actual, expected, name) {
+      const a = JSON.stringify(actual);
+      const e = JSON.stringify(expected);
+      if (a === e) {
+        passed++;
+        report(true, "통과: " + name);
+      } else {
+        failed++;
+        report(false, "실패: " + name + "\n  기대값: " + e + "\n  실제값: " + a);
+      }
+    }
+
+    // 테스트용 Todo 생성 헬퍼
+    function t(overrides) {
+      return Object.assign(
+        { id: "x", text: "할 일", category: "개인", done: false, dueDate: null, createdAt: 0 },
+        overrides
+      );
+    }
+
+    function runTests() {
+      // makeId
+      assertEqual(typeof makeId(), "string", "makeId는 문자열을 돌려준다");
+      const ids = new Set(Array.from({length: 1000}, makeId));
+      assertEqual(ids.size, 1000, "makeId는 연속 1000회 호출에도 중복되지 않는다");
+
+      // sortTodos — 미완료가 완료보다 먼저
+      assertDeepEqual(
+        sortTodos([t({id:"a", done:true}), t({id:"b", done:false})]).map(x => x.id),
+        ["b", "a"], "미완료가 완료보다 앞에 온다");
+
+      // sortTodos — 마감일 빠른 순, 없는 항목은 뒤
+      assertDeepEqual(
+        sortTodos([t({id:"a", dueDate:null}), t({id:"b", dueDate:"2026-10-09"}), t({id:"c", dueDate:"2026-10-07"})]).map(x => x.id),
+        ["c", "b", "a"], "마감일이 빠른 순, 없는 항목은 뒤로 간다");
+
+      // sortTodos — 마감일이 같으면 나중에 추가한 것이 위
+      assertDeepEqual(
+        sortTodos([t({id:"a", createdAt:100}), t({id:"b", createdAt:200})]).map(x => x.id),
+        ["b", "a"], "마감일이 없으면 나중에 추가한 것이 위에 온다");
+
+      // sortTodos — 원본 불변
+      const src = [t({id:"a", done:true}), t({id:"b", done:false})];
+      sortTodos(src);
+      assertDeepEqual(src.map(x => x.id), ["a", "b"], "sortTodos는 원본 배열을 바꾸지 않는다");
+
+      // filterTodos — 두 축 AND
+      const sample = [
+        t({id:"a", category:"업무", done:false}),
+        t({id:"b", category:"업무", done:true}),
+        t({id:"c", category:"개인", done:false}),
+      ];
+      assertDeepEqual(filterTodos(sample, {category:"전체", status:"전체"}).map(x => x.id), ["a","b","c"], "전체/전체는 모두 통과한다");
+      assertDeepEqual(filterTodos(sample, {category:"업무", status:"미완료"}).map(x => x.id), ["a"], "카테고리와 상태는 AND로 적용된다");
+      assertDeepEqual(filterTodos(sample, {category:"전체", status:"완료"}).map(x => x.id), ["b"], "상태 완료는 완료 항목만 남긴다");
+      assertDeepEqual(filterTodos(sample, {category:"공부", status:"전체"}).map(x => x.id), [], "해당 카테고리가 없으면 빈 배열이다");
+
+      // calcProgress
+      assertDeepEqual(calcProgress(sample), {done:1, total:3, percent:33}, "진행률은 백분율을 정수로 내림한다");
+      assertDeepEqual(calcProgress([]), {done:0, total:0, percent:0}, "항목이 없으면 0/0, 0%다");
+
+      // countByCategory
+      assertDeepEqual(countByCategory(sample, "업무"), {done:1, total:2}, "카테고리별 집계는 해당 카테고리만 센다");
+    }
+
+    // 하네스는 실제 사용자 데이터(todos.v1)를 보호한다.
+    // 이후 과제의 테스트가 저장 함수를 호출해도 사용자의 할 일이 덮어써지지 않도록,
+    // 실행 전에 값을 저장해 두고 실행 후(예외가 나도) 되돌린다.
+    const savedTodos = localStorage.getItem("todos.v1");
+    try {
+      runTests();
+    } catch (err) {
+      failed++;
+      report(false, "실패: 테스트 실행 중 예외가 발생했다.\n  " + err);
+    } finally {
+      if (savedTodos === null) {
+        localStorage.removeItem("todos.v1");
+      } else {
+        localStorage.setItem("todos.v1", savedTodos);
+      }
+    }
+
+    const summary = document.getElementById("summary");
+    summary.textContent = "통과 " + passed + "건, 실패 " + failed + "건";
+    summary.className = failed === 0 ? "is-pass" : "is-fail";
+  </script>
+</body>
+</html>
