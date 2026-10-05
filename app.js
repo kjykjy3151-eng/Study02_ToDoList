@@ -4,13 +4,23 @@
 
 const STORAGE_KEY = "todos.v1";
 
+// render 가 의존하는 최소 형식: 객체이고, id, text 는 문자열, done 은 불리언, dueDate 는 null 또는 문자열.
+function isTodo(value) {
+  return typeof value === "object" && value !== null
+    && typeof value.id === "string"
+    && typeof value.text === "string"
+    && typeof value.done === "boolean"
+    && (value.dueDate === null || typeof value.dueDate === "string");
+}
+
 // 저장된 값이 없으면 빈 배열. 파싱에 실패하거나 배열이 아니면 원본을 broken 키로 옮기고 빈 배열로 시작한다.
+// 배열 안의 형식이 맞지 않는 요소는 그 요소만 버리고 나머지는 살린다(broken 키로는 옮기지 않는다).
 function loadTodos(key = STORAGE_KEY) {
   const raw = localStorage.getItem(key);
   if (raw === null) return [];
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed)) return parsed.filter(isTodo);
   } catch (err) {
     // 아래에서 손상값으로 처리한다.
   }

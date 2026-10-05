@@ -147,6 +147,17 @@
         assertEqual(localStorage.getItem(KB), bad, `배열이 아닌 ${bad} 도 broken 키로 옮긴다`);
       }
 
+      // 배열 안에 형식이 맞지 않는 요소가 섞여 있으면 그 요소만 버리고 나머지는 살린다.
+      const good = t({id: "g"});
+      localStorage.removeItem(KB);
+      localStorage.setItem(K, JSON.stringify([good, null]));
+      assertDeepEqual(loadTodos(K), [good], "[정상, null] 에서 정상 항목만 돌려준다");
+      assertEqual(localStorage.getItem(KB), null, "요소 단위 손상은 broken 키로 옮기지 않는다");
+      assertEqual(localStorage.getItem(K) !== null, true, "요소 단위 손상은 원래 키를 지우지 않는다");
+      const badElements = [42, "문자열", [], {}, t({id: 1}), t({text: null}), t({done: "true"}), t({dueDate: undefined}), t({dueDate: 20261007})];
+      localStorage.setItem(K, JSON.stringify([good].concat(badElements)));
+      assertDeepEqual(loadTodos(K).map(x => x.id), ["g"], "id, text, done, dueDate 형식이 맞지 않는 요소는 모두 버린다");
+
       localStorage.removeItem(K);
       localStorage.removeItem(KB);
 
