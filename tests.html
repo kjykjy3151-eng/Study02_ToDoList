@@ -397,6 +397,11 @@
         assertEqual(state.todos.length, 2, "수정 중이 아니면 창 포커스를 되찾을 때 저장소의 변경을 읽어 온다");
         assertEqual(list.children.length, 2, "저장소에서 새로 읽은 항목이 목록에 그려진다");
 
+        // 저장소가 그대로면 다시 그리지 않는다. 다시 그리면 키보드 사용자의 포커스가 항목에서 body 로 떨어진다.
+        const keptCheck = list.children[0].querySelector(".todo-check");
+        window.dispatchEvent(new Event("focus"));
+        assertEqual(keptCheck.isConnected && list.contains(keptCheck), true, "저장소가 그대로면 창 포커스를 되찾아도 목록을 다시 그리지 않는다");
+
         // 수정 중에 다른 항목을 누르면: 누른 요소가 살아 있어야 click 이 도착한다. (mousedown -> blur -> click 순서)
         state.todos = [
           t({id: "m", text: "수정할 것", dueDate: "2026-10-01"}),

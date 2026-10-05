@@ -333,7 +333,9 @@ document.getElementById("status-filter").addEventListener("click", event => {
 // 수정 중에는 입력 중인 글을 잃지 않도록 건너뛴다. storage 이벤트는 file:// 문서 사이에서 전달되는지 보장되지 않아 쓰지 않는다.
 window.addEventListener("focus", () => {
   if (editingId !== null) return;
-  state.todos = loadTodos();
+  const loaded = loadTodos();
+  if (JSON.stringify(loaded) === JSON.stringify(state.todos)) return;
+  state.todos = loaded;
   render();
 });
 
