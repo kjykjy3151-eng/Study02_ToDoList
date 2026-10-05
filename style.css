@@ -69,6 +69,7 @@ h1 {
 
 .add-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 20px 0 16px;
 }
@@ -84,7 +85,7 @@ h1 {
 }
 
 #todo-input {
-  flex: 1;
+  flex: 1 1 120px;
   min-width: 0;
 }
 
