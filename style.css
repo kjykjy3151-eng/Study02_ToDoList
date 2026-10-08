@@ -7,6 +7,41 @@
   --text: #1f2430;
   --muted: #6b7280;
   --accent: #3b6fd8;
+  --on-accent: #ffffff; /* 강조색 바탕 위의 글자색 */
+  --today-bg: #e8effc;
+  --danger: #d33;
+  color-scheme: light; /* 입력창, 날짜 선택기 같은 기본 컨트롤도 테마를 따른다. */
+}
+
+/* 다크 모드의 층: 저장된 선택이 없으면 OS 설정(미디어 쿼리)이 정하고, 사용자가 누르면 data-theme 이 이긴다.
+   미디어 쿼리 안의 :not([data-theme="light"]) 가 있어야 OS 가 다크여도 라이트를 고른 사용자의 선택이 유지된다.
+   두 블록의 값은 같아야 한다. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161a;
+    --surface: #1e2128;
+    --border: #3b414d;
+    --text: #e6e8ec;
+    --muted: #9ca3af;
+    --accent: #7aa2f7;
+    --on-accent: #0b1220;
+    --today-bg: #243252;
+    --danger: #f87171;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #14161a;
+  --surface: #1e2128;
+  --border: #3b414d;
+  --text: #e6e8ec;
+  --muted: #9ca3af;
+  --accent: #7aa2f7;
+  --on-accent: #0b1220;
+  --today-bg: #243252;
+  --danger: #f87171;
+  color-scheme: dark;
 }
 
 * {
@@ -25,6 +60,38 @@ body {
   max-width: 640px;
   margin: 0 auto;
   padding: 24px 16px 48px;
+}
+
+/* 표시 설정 */
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.toggle-btn {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* 눌린 상태는 색만으로 전하지 않는다. 버튼 글자에도 켬/끔이 적히고 aria-pressed 가 같은 값을 가진다. */
+.toggle-btn[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 한 단일 때는 눌러도 달라지는 것이 없으므로 레이아웃 버튼을 숨긴다. 아래 두 단 미디어 쿼리 안에서만 보인다. */
+#layout-toggle {
+  display: none;
 }
 
 /* 진행률 */
@@ -111,7 +178,7 @@ h2 {
 
 /* 오늘 칸: 색만으로 구분하지 않도록 굵은 테두리를 함께 쓴다. */
 #daily-table .is-today {
-  background: #e8effc;
+  background: var(--today-bg);
   color: var(--accent);
   border-left: 2px solid var(--accent);
   border-right: 2px solid var(--accent);
@@ -143,6 +210,11 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
+  color: var(--text);
+}
+
+.add-form ::placeholder {
+  color: var(--muted);
 }
 
 #todo-input {
@@ -153,7 +225,7 @@ h2 {
 .add-form button {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   cursor: pointer;
 }
 
@@ -179,7 +251,7 @@ h2 {
 .filter-btn.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* 목록 */
@@ -212,6 +284,8 @@ h2 {
   flex: 1;
   min-width: 0;
   font: inherit;
+  background: var(--surface);
+  color: var(--text);
 }
 
 .is-done .todo-text {
@@ -241,7 +315,7 @@ h2 {
 }
 
 .todo-delete:hover {
-  color: #d33;
+  color: var(--danger);
 }
 
 /* 빈 상태 */
@@ -254,8 +328,9 @@ h2 {
 
 /* 넓은 화면: 왼쪽에 입력과 요약, 오른쪽에 목록. 좁아지면 위 규칙 그대로 한 단으로 쌓인다. */
 
+/* "한 줄 고정" 을 고르면(data-layout="single") 넓은 화면에서도 위 규칙 그대로 한 단이다. 레이아웃 버튼도 같은 쿼리 안에서 보인다. */
 @media (min-width: 860px) {
-  .app {
+  :root:not([data-layout="single"]) .app {
     max-width: 1040px;
     display: grid;
     grid-template-columns: 360px 1fr;
@@ -263,7 +338,11 @@ h2 {
     align-items: start;
   }
 
-  #todo-list {
+  :root:not([data-layout="single"]) #todo-list {
     margin-top: 0;
+  }
+
+  #layout-toggle {
+    display: inline-block;
   }
 }

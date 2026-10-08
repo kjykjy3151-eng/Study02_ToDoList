@@ -4,6 +4,7 @@
 
 const STORAGE_KEY = "todos.v1";
 const DAILY_LOG_KEY = "dailyLog.v1";
+const PREFS_KEY = "prefs.v1";
 
 // render 가 의존하는 최소 형식: 객체이고, id, text 는 문자열, category 는 세 카테고리 중 하나, done 은 불리언, dueDate 는 null 또는 문자열.
 // completedAt 은 null 또는 문자열이고, 이 필드가 생기기 전에 저장된 할 일에는 없으므로 없어도(undefined) 받아들인다. 없으면 null 로 본다.
@@ -65,12 +66,39 @@ function saveDailyLog(log, key = DAILY_LOG_KEY) {
   localStorage.setItem(key, JSON.stringify(log));
 }
 
+// 표시 설정 {theme: "light" | "dark" | null, layout: "auto" | "single"}. theme 가 null 이면 OS 설정을 따른다.
+// 저장된 값이 없으면 기본값. 파싱에 실패하거나 객체가 아니면 loadDailyLog 와 같이 broken 키로 옮기고 기본값으로 시작한다.
+// 객체 안에서 허용된 값이 아닌 필드는 그 필드만 기본값으로 되돌린다.
+function loadPrefs(key = PREFS_KEY) {
+  const raw = localStorage.getItem(key);
+  if (raw === null) return { theme: null, layout: "auto" };
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return {
+        theme: parsed.theme === "light" || parsed.theme === "dark" ? parsed.theme : null,
+        layout: parsed.layout === "single" ? "single" : "auto",
+      };
+    }
+  } catch (err) {
+    // 아래에서 손상값으로 처리한다.
+  }
+  localStorage.setItem(key + ".broken", raw);
+  localStorage.removeItem(key);
+  return { theme: null, layout: "auto" };
+}
+
+function savePrefs(prefs, key = PREFS_KEY) {
+  localStorage.setItem(key, JSON.stringify(prefs));
+}
+
 // ===== 상태 =====
 
 const state = {
   todos: [],
   dailyLog: {}, // 날짜별 완료 수. 할 일을 지워도 줄지 않는 누적 기록이다.
   filter: { category: "전체", status: "전체" },
+  prefs: { theme: null, layout: "auto" }, // 필터와 달리 저장한다. 새로고침할 때마다 테마가 되돌아가는 다크 모드는 쓸 수 없다.
 };
 
 // 지금 인라인 수정 중인 항목의 id. 수정 중이 아니면 null. Esc 가 이 값을 먼저 비워서 뒤따르는 blur 가 저장으로 처리되지 않게 한다.
@@ -143,6 +171,11 @@ function isAllDone(progress) {
   return progress.total > 0 && progress.done === progress.total;
 }
 
+// 지금 화면이 다크인가. 저장된 선택(theme)이 있으면 그것이, 없으면 OS 설정(systemDark)이 정한다.
+function isDarkTheme(theme, systemDark) {
+  return theme === null ? systemDark : theme === "dark";
+}
+
 // ===== 렌더 =====
 
 // <li> 하나를 만들어 돌려주기만 한다. 사용자 데이터는 전부 textContent/속성으로 넣는다(innerHTML 금지).
@@ -209,6 +242,29 @@ function renderDailyTable(table, days) {
   tbody.appendChild(body);
   table.textContent = "";
   table.append(thead, tbody);
+}
+
+// 표시 설정을 화면에 반영한다. data-theme 은 저장된 선택이 있을 때만 붙인다. 없으면 style.css 의 미디어 쿼리가 OS 설정으로 정한다.
+// 단추의 aria-pressed 는 지금 실제로 보이는 상태를 따른다(선택이 없고 OS 가 다크이면 다크 모드 단추는 눌린 상태다).
+function renderPrefs() {
+  const root = document.documentElement;
+  if (state.prefs.theme === null) root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", state.prefs.theme);
+  if (state.prefs.layout === "single") root.setAttribute("data-layout", "single");
+  else root.removeAttribute("data-layout");
+
+  const dark = isDarkTheme(state.prefs.theme, systemPrefersDark());
+  const themeButton = document.getElementById("theme-toggle");
+  themeButton.setAttribute("aria-pressed", String(dark));
+  themeButton.textContent = "다크 모드: " + (dark ? "켬" : "끔");
+  const single = state.prefs.layout === "single";
+  const layoutButton = document.getElementById("layout-toggle");
+  layoutButton.setAttribute("aria-pressed", String(single));
+  layoutButton.textContent = "한 줄 고정: " + (single ? "켬" : "끔");
+}
+
+function systemPrefersDark() {
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
 function render() {
@@ -309,6 +365,19 @@ function updateTodoText(id, text) {
     saveTodos(state.todos);
   }
   render();
+}
+
+// 테마는 지금 보이는 모양의 반대로 바뀐다. 처음 누르면 OS 설정을 따르던 상태에서 명시적인 선택(light, dark)으로 바뀌고, 그 뒤로는 OS 가 바뀌어도 이 선택이 이긴다.
+function toggleTheme() {
+  state.prefs.theme = isDarkTheme(state.prefs.theme, systemPrefersDark()) ? "light" : "dark";
+  savePrefs(state.prefs);
+  renderPrefs();
+}
+
+function toggleLayout() {
+  state.prefs.layout = state.prefs.layout === "single" ? "auto" : "single";
+  savePrefs(state.prefs);
+  renderPrefs();
 }
 
 // 필터는 데이터가 아니므로 저장하지 않는다. 새로고침하면 기본값으로 돌아간다.
@@ -431,9 +500,24 @@ document.getElementById("status-filter").addEventListener("click", event => {
   if (button) setFilter({ status: button.dataset.status });
 });
 
+document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+document.getElementById("layout-toggle").addEventListener("click", toggleLayout);
+
+// 선택이 없어 OS 설정을 따르는 중에 OS 가 바뀌면 단추의 눌림 상태도 따라가야 한다.
+if (typeof window.matchMedia === "function") {
+  const query = window.matchMedia("(prefers-color-scheme: dark)");
+  if (typeof query.addEventListener === "function") query.addEventListener("change", renderPrefs);
+}
+
 // 창이 다시 포커스를 받으면 저장소를 다시 읽는다. 다른 탭이 그동안 저장한 내용을 이 탭의 오래된 스냅샷이 덮어쓰지 않게 하려는 것이다.
 // 수정 중에는 입력 중인 글을 잃지 않도록 건너뛴다. storage 이벤트는 file:// 문서 사이에서 전달되는지 보장되지 않아 쓰지 않는다.
 window.addEventListener("focus", () => {
+  // 다른 탭이 바꾼 표시 설정을 이 탭의 오래된 값이 덮어쓰지 않도록 먼저 맞춘다. 수정 중이어도 입력 중인 글과 무관하다.
+  const loadedPrefs = loadPrefs();
+  if (JSON.stringify(loadedPrefs) !== JSON.stringify(state.prefs)) {
+    state.prefs = loadedPrefs;
+    renderPrefs();
+  }
   if (editingId !== null) return;
   const loaded = loadTodos();
   const loadedLog = loadDailyLog();
@@ -446,4 +530,6 @@ window.addEventListener("focus", () => {
 // 시작: 저장된 데이터를 불러와 첫 화면을 그린다. 항상 app.js 맨 아래에 둔다.
 state.todos = loadTodos();
 state.dailyLog = loadDailyLog();
+state.prefs = loadPrefs();
+renderPrefs();
 render();

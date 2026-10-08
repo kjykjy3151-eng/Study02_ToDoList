@@ -33,6 +33,8 @@
     <div id="status-filter"></div>
     <ul id="todo-list"></ul>
     <p id="empty-state"></p>
+    <button type="button" id="theme-toggle" aria-pressed="false">다크 모드: 끔</button>
+    <button type="button" id="layout-toggle" aria-pressed="false">한 줄 고정: 끔</button>
   </div>
 
   <script src="app.js"></script>
@@ -708,14 +710,177 @@
       }
     }
 
+    // 표시 설정(다크 모드, 레이아웃). 단추 클릭은 실제 키 prefs.v1 에 쓰므로 호출하는 쪽(하네스)이 전후로 보존, 복원한다.
+    // OS 의 다크 설정은 테스트에서 바꿀 수 없으므로 window.matchMedia 를 잠시 바꿔 끼워 두 경우를 모두 확인한다.
+    function runPrefsTests() {
+      const root = document.documentElement;
+      const themeBtn = document.getElementById("theme-toggle");
+      const layoutBtn = document.getElementById("layout-toggle");
+      const realMatchMedia = window.matchMedia;
+      const setSystemDark = dark => { window.matchMedia = () => ({matches: dark, addEventListener() {}}); };
+      // 새로고침: 화면과 상태를 비우고 app.js 의 시작 순서(저장소에서 읽기, 반영)를 그대로 다시 한다.
+      const reload = () => {
+        state.prefs = {theme: null, layout: "auto"};
+        root.removeAttribute("data-theme");
+        root.removeAttribute("data-layout");
+        themeBtn.setAttribute("aria-pressed", "false");
+        layoutBtn.setAttribute("aria-pressed", "false");
+        state.prefs = loadPrefs();
+        renderPrefs();
+      };
+      const stored = () => JSON.parse(localStorage.getItem("prefs.v1"));
+      try {
+        // 저장 계층 — 사용자 설정(prefs.v1)을 건드리지 않도록 별도 키를 쓴다.
+        const PK = "prefs.test";
+        localStorage.removeItem(PK);
+        localStorage.removeItem(PK + ".broken");
+        assertDeepEqual(loadPrefs(PK), {theme: null, layout: "auto"}, "표시 설정이 없으면 기본값(OS 설정 따름, 자동)이다");
+        savePrefs({theme: "light", layout: "single"}, PK);
+        assertDeepEqual(loadPrefs(PK), {theme: "light", layout: "single"}, "저장한 표시 설정을 그대로 읽어온다");
+        savePrefs({theme: "dark", layout: "auto"}, PK);
+        assertDeepEqual(loadPrefs(PK), {theme: "dark", layout: "auto"}, "dark 선택도 그대로 읽어온다");
+        localStorage.setItem(PK, JSON.stringify({theme: "sepia", layout: 3}));
+        assertDeepEqual(loadPrefs(PK), {theme: null, layout: "auto"}, "허용되지 않은 값은 필드별로 기본값이 된다");
+        localStorage.setItem(PK, JSON.stringify({theme: "dark"}));
+        assertDeepEqual(loadPrefs(PK), {theme: "dark", layout: "auto"}, "없는 필드만 기본값이 되고 나머지는 살아남는다");
+        assertEqual(localStorage.getItem(PK + ".broken"), null, "필드 단위 손상은 broken 키로 옮기지 않는다");
+        for (const bad of ["{{{", "[]", "null", "42", '"dark"']) {
+          localStorage.setItem(PK, bad);
+          localStorage.removeItem(PK + ".broken");
+          let result;
+          let threw = false;
+          try { result = loadPrefs(PK); } catch (err) { threw = true; }
+          assertEqual(threw, false, `손상된 표시 설정 ${bad} 를 읽어도 예외가 나지 않는다`);
+          assertDeepEqual(result, {theme: null, layout: "auto"}, `표시 설정이 ${bad} 이면 기본값으로 시작한다`);
+          assertEqual(localStorage.getItem(PK + ".broken"), bad, `표시 설정 ${bad} 는 broken 키로 옮긴다`);
+          assertEqual(localStorage.getItem(PK), null, `표시 설정 ${bad} 는 원래 키에서 제거한다`);
+        }
+        localStorage.removeItem(PK);
+        localStorage.removeItem(PK + ".broken");
+
+        // isDarkTheme: 저장된 선택이 OS 설정보다 우선한다.
+        assertEqual(isDarkTheme(null, true), true, "선택이 없고 OS 가 다크이면 다크다");
+        assertEqual(isDarkTheme(null, false), false, "선택이 없고 OS 가 라이트이면 라이트다");
+        assertEqual(isDarkTheme("light", true), false, "OS 가 다크여도 라이트를 고르면 라이트다");
+        assertEqual(isDarkTheme("dark", false), true, "OS 가 라이트여도 다크를 고르면 다크다");
+
+        // 저장된 선택이 없으면 data-theme 을 붙이지 않는다(OS 설정은 style.css 의 미디어 쿼리가 정한다).
+        for (const osDark of [false, true]) {
+          setSystemDark(osDark);
+          localStorage.removeItem("prefs.v1");
+          reload();
+          assertEqual(root.hasAttribute("data-theme"), false, `저장된 선택이 없으면 data-theme 이 없다(OS 다크 ${osDark})`);
+          assertEqual(root.hasAttribute("data-layout"), false, `저장된 선택이 없으면 data-layout 도 없다(OS 다크 ${osDark})`);
+          assertEqual(themeBtn.getAttribute("aria-pressed"), String(osDark), `선택이 없으면 테마 단추의 aria-pressed 는 OS 설정을 따른다(OS 다크 ${osDark})`);
+          assertEqual(layoutBtn.getAttribute("aria-pressed"), "false", "저장된 선택이 없으면 레이아웃 단추는 눌리지 않은 상태다");
+        }
+        assertEqual(localStorage.getItem("prefs.v1"), null, "읽기만으로는 prefs.v1 을 쓰지 않는다");
+
+        // 테마 단추: 지금 보이는 모양의 반대를 명시적 선택으로 저장한다.
+        setSystemDark(false);
+        reload();
+        themeBtn.click();
+        assertEqual(root.getAttribute("data-theme"), "dark", "OS 가 라이트일 때 단추를 누르면 data-theme 이 dark 가 된다");
+        assertDeepEqual(stored(), {theme: "dark", layout: "auto"}, "단추를 누르면 prefs.v1 에 theme 이 쓰인다");
+        assertEqual(themeBtn.getAttribute("aria-pressed"), "true", "다크가 되면 aria-pressed 가 true 다");
+        themeBtn.click();
+        assertEqual(root.getAttribute("data-theme"), "light", "다시 누르면 data-theme 이 light 가 된다(선택이 없음으로 돌아가지 않는다)");
+        assertEqual(stored().theme, "light", "두 번째 누름도 저장된다");
+        assertEqual(themeBtn.getAttribute("aria-pressed"), "false", "라이트가 되면 aria-pressed 가 false 다");
+
+        // OS 가 다크일 때: 처음 누르면 라이트가 된다. 선택이 없던 상태에서 보이는 모양의 반대로 간다.
+        setSystemDark(true);
+        localStorage.removeItem("prefs.v1");
+        reload();
+        themeBtn.click();
+        assertEqual(root.getAttribute("data-theme"), "light", "OS 가 다크일 때 단추를 누르면 data-theme 이 light 가 된다");
+        assertEqual(stored().theme, "light", "OS 가 다크일 때 누른 결과 light 가 저장된다");
+        assertEqual(themeBtn.getAttribute("aria-pressed"), "false", "OS 가 다크여도 라이트를 골랐으면 aria-pressed 는 false 다");
+
+        // 저장된 light 는 OS 가 다크인 기계에서도 이긴다. 새로고침 후에도 그대로다.
+        setSystemDark(true);
+        localStorage.setItem("prefs.v1", JSON.stringify({theme: "light", layout: "auto"}));
+        reload();
+        assertEqual(root.getAttribute("data-theme"), "light", "OS 가 다크여도 저장된 light 선택이 data-theme 에 반영된다");
+        assertEqual(themeBtn.getAttribute("aria-pressed"), "false", "OS 가 다크여도 저장된 light 이면 aria-pressed 는 false 다");
+        localStorage.setItem("prefs.v1", JSON.stringify({theme: "dark", layout: "auto"}));
+        setSystemDark(false);
+        reload();
+        assertEqual(root.getAttribute("data-theme"), "dark", "OS 가 라이트여도 저장된 dark 선택이 반영된다");
+        assertEqual(themeBtn.getAttribute("aria-pressed"), "true", "OS 가 라이트여도 저장된 dark 이면 aria-pressed 는 true 다");
+
+        // 레이아웃 단추
+        localStorage.removeItem("prefs.v1");
+        reload();
+        layoutBtn.click();
+        assertEqual(state.prefs.layout, "single", "레이아웃 단추를 누르면 한 줄 고정이 된다");
+        assertDeepEqual(stored(), {theme: null, layout: "single"}, "레이아웃 선택이 prefs.v1 에 쓰이고 테마는 선택 없음 그대로다");
+        assertEqual(layoutBtn.getAttribute("aria-pressed"), "true", "한 줄 고정이면 aria-pressed 가 true 다");
+        assertEqual(root.getAttribute("data-layout"), "single", "한 줄 고정이면 data-layout 이 single 이다");
+        assertEqual(root.hasAttribute("data-theme"), false, "레이아웃을 바꿔도 data-theme 은 붙지 않는다");
+        layoutBtn.click();
+        assertEqual(state.prefs.layout, "auto", "다시 누르면 자동으로 돌아간다");
+        assertEqual(stored().layout, "auto", "자동도 저장된다");
+        assertEqual(layoutBtn.getAttribute("aria-pressed"), "false", "자동이면 aria-pressed 가 false 다");
+        assertEqual(root.hasAttribute("data-layout"), false, "자동이면 data-layout 이 없다");
+
+        // 두 단추 모두 새로고침 뒤에 상태가 복원된다.
+        setSystemDark(false);
+        localStorage.removeItem("prefs.v1");
+        reload();
+        themeBtn.click();
+        layoutBtn.click();
+        reload();
+        assertDeepEqual(state.prefs, {theme: "dark", layout: "single"}, "새로고침 뒤 상태에 두 선택이 복원된다");
+        assertEqual(root.getAttribute("data-theme"), "dark", "새로고침 뒤 data-theme 이 복원된다");
+        assertEqual(root.getAttribute("data-layout"), "single", "새로고침 뒤 data-layout 이 복원된다");
+        assertEqual(themeBtn.getAttribute("aria-pressed"), "true", "새로고침 뒤 테마 단추의 aria-pressed 가 복원된다");
+        assertEqual(layoutBtn.getAttribute("aria-pressed"), "true", "새로고침 뒤 레이아웃 단추의 aria-pressed 가 복원된다");
+        assertEqual(layoutBtn.textContent, "한 줄 고정: 켬", "눌린 상태는 단추 글자로도 드러난다(색만으로 전하지 않는다)");
+
+        // 손상된 prefs.v1 로 시작해도 앱이 깨지지 않고 기본값으로 뜬다.
+        localStorage.setItem("prefs.v1", "{{{");
+        localStorage.removeItem("prefs.v1.broken");
+        let bootThrew = false;
+        try { reload(); } catch (err) { bootThrew = true; }
+        assertEqual(bootThrew, false, "손상된 prefs.v1 로 시작해도 예외가 나지 않는다");
+        assertDeepEqual(state.prefs, {theme: null, layout: "auto"}, "손상된 prefs.v1 이면 기본값으로 시작한다");
+        assertEqual(root.hasAttribute("data-theme") || root.hasAttribute("data-layout"), false, "손상된 prefs.v1 이면 속성이 붙지 않는다");
+        assertEqual(localStorage.getItem("prefs.v1.broken"), "{{{", "손상된 prefs.v1 은 prefs.v1.broken 에 남는다");
+        localStorage.removeItem("prefs.v1.broken");
+
+        // 다른 탭이 저장한 설정은 창 포커스 때 반영된다.
+        localStorage.removeItem("prefs.v1");
+        reload();
+        localStorage.setItem("prefs.v1", JSON.stringify({theme: "dark", layout: "single"}));
+        window.dispatchEvent(new Event("focus"));
+        assertDeepEqual(state.prefs, {theme: "dark", layout: "single"}, "창이 포커스를 되찾으면 다른 탭이 저장한 표시 설정을 읽는다");
+        assertEqual(root.getAttribute("data-theme"), "dark", "포커스 뒤 data-theme 이 반영된다");
+
+        // 표시 설정은 할 일과 일일 기록을 건드리지 않는다.
+        const todosBefore = localStorage.getItem("todos.v1");
+        const logBefore = localStorage.getItem("dailyLog.v1");
+        themeBtn.click();
+        layoutBtn.click();
+        assertEqual(localStorage.getItem("todos.v1"), todosBefore, "표시 설정을 바꿔도 todos.v1 은 그대로다");
+        assertEqual(localStorage.getItem("dailyLog.v1"), logBefore, "표시 설정을 바꿔도 dailyLog.v1 은 그대로다");
+      } finally {
+        window.matchMedia = realMatchMedia;
+      }
+    }
+
     // 하네스는 실제 사용자 데이터(todos.v1)를 보호한다.
     // 이후 과제의 테스트가 저장 함수를 호출해도 사용자의 할 일이 덮어써지지 않도록,
     // 실행 전에 값을 저장해 두고 실행 후(예외가 나도) 되돌린다.
     // 일일 기록(dailyLog.v1)도 같은 이유로 되돌린다. 지우면 사용자의 성과 이력이 사라진다.
     const savedTodos = localStorage.getItem("todos.v1");
     const savedLog = localStorage.getItem("dailyLog.v1");
+    // 표시 설정(prefs.v1)도 같은 이유로 되돌린다. 테스트가 사용자의 테마를 바꿔 놓으면 안 된다.
+    const savedPrefs = localStorage.getItem("prefs.v1");
+    const savedPrefsBroken = localStorage.getItem("prefs.v1.broken");
     try {
       runTests();
+      runPrefsTests();
     } catch (err) {
       failed++;
       report(false, "실패: 테스트 실행 중 예외가 발생했다.\n  " + err);
@@ -730,6 +895,19 @@
       } else {
         localStorage.setItem("dailyLog.v1", savedLog);
       }
+      if (savedPrefs === null) {
+        localStorage.removeItem("prefs.v1");
+      } else {
+        localStorage.setItem("prefs.v1", savedPrefs);
+      }
+      if (savedPrefsBroken === null) {
+        localStorage.removeItem("prefs.v1.broken");
+      } else {
+        localStorage.setItem("prefs.v1.broken", savedPrefsBroken);
+      }
+      // 복원한 저장소 기준으로 상태와 속성도 되돌린다.
+      state.prefs = loadPrefs();
+      renderPrefs();
     }
 
     const summary = document.getElementById("summary");
