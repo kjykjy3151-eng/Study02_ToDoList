@@ -3,15 +3,18 @@
 // ===== 저장 =====
 
 const STORAGE_KEY = "todos.v1";
+const DAILY_LOG_KEY = "dailyLog.v1";
 
 // render 가 의존하는 최소 형식: 객체이고, id, text 는 문자열, category 는 세 카테고리 중 하나, done 은 불리언, dueDate 는 null 또는 문자열.
+// completedAt 은 null 또는 문자열이고, 이 필드가 생기기 전에 저장된 할 일에는 없으므로 없어도(undefined) 받아들인다. 없으면 null 로 본다.
 function isTodo(value) {
   return typeof value === "object" && value !== null
     && typeof value.id === "string"
     && typeof value.text === "string"
     && ["업무", "개인", "공부"].includes(value.category)
     && typeof value.done === "boolean"
-    && (value.dueDate === null || typeof value.dueDate === "string");
+    && (value.dueDate === null || typeof value.dueDate === "string")
+    && (value.completedAt === undefined || value.completedAt === null || typeof value.completedAt === "string");
 }
 
 // 저장된 값이 없으면 빈 배열. 파싱에 실패하거나 배열이 아니면 원본을 broken 키로 옮기고 빈 배열로 시작한다.
@@ -36,10 +39,37 @@ function saveTodos(todos, key = STORAGE_KEY) {
   localStorage.setItem(key, JSON.stringify(todos));
 }
 
+// 날짜별 완료 수 {"2026-10-09": 5}. 저장된 값이 없으면 빈 객체. 파싱에 실패하거나 객체가 아니면 loadTodos 와 같이 broken 키로 옮기고 빈 객체로 시작한다.
+// 날짜 형식이 아니거나 0 이상의 정수가 아닌 항목은 그 항목만 버린다.
+function loadDailyLog(key = DAILY_LOG_KEY) {
+  const raw = localStorage.getItem(key);
+  if (raw === null) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      const log = {};
+      for (const day of Object.keys(parsed)) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isInteger(parsed[day]) && parsed[day] >= 0) log[day] = parsed[day];
+      }
+      return log;
+    }
+  } catch (err) {
+    // 아래에서 손상값으로 처리한다.
+  }
+  localStorage.setItem(key + ".broken", raw);
+  localStorage.removeItem(key);
+  return {};
+}
+
+function saveDailyLog(log, key = DAILY_LOG_KEY) {
+  localStorage.setItem(key, JSON.stringify(log));
+}
+
 // ===== 상태 =====
 
 const state = {
   todos: [],
+  dailyLog: {}, // 날짜별 완료 수. 할 일을 지워도 줄지 않는 누적 기록이다.
   filter: { category: "전체", status: "전체" },
 };
 
@@ -74,16 +104,43 @@ function filterTodos(todos, filter) {
   });
 }
 
+// 분모가 0이면 0%. 전체 진행률과 카테고리 탭이 같은 내림 규칙을 쓰도록 한곳에 둔다.
+function percentOf(done, total) {
+  return total === 0 ? 0 : Math.floor(done / total * 100);
+}
+
 function calcProgress(todos) {
   const total = todos.length;
   const done = todos.filter(todo => todo.done).length;
-  const percent = total === 0 ? 0 : Math.floor(done / total * 100);
-  return { done, total, percent };
+  return { done, total, percent: percentOf(done, total) };
 }
 
 function countByCategory(todos, category) {
   const inCategory = todos.filter(todo => todo.category === category);
   return { done: inCategory.filter(todo => todo.done).length, total: inCategory.length };
+}
+
+// 로컬 시간 기준 "YYYY-MM-DD". toISOString() 은 UTC 로 바꾸므로 한국 시간 늦은 밤의 완료가 전날로 기록된다.
+function formatDate(date) {
+  return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+}
+
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+// today 로 끝나는 최근 7일, 오래된 날이 앞. 기록이 없는 날은 0. 날짜 계산은 Date 생성자에 맡겨 월말, 서머타임을 따로 다루지 않는다.
+function lastSevenDays(log, today) {
+  const days = [];
+  for (let back = 6; back >= 0; back--) {
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - back);
+    const key = formatDate(date);
+    days.push({ date: key, weekday: WEEKDAYS[date.getDay()], count: log[key] || 0, isToday: back === 0 });
+  }
+  return days;
+}
+
+// 할 일이 하나라도 있고 전부 끝났을 때만 true. 빈 목록은 0 / 0 이지만 달성이 아니다.
+function isAllDone(progress) {
+  return progress.total > 0 && progress.done === progress.total;
 }
 
 // ===== 렌더 =====
@@ -128,6 +185,32 @@ function renderItem(todo) {
   return li;
 }
 
+// 최근 7일 표: 머리글 줄에 요일, 본문 줄에 완료 수. 오늘 칸에는 is-today 를 붙인다.
+function renderDailyTable(table, days) {
+  const head = document.createElement("tr");
+  const body = document.createElement("tr");
+  for (const day of days) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = day.weekday;
+    const td = document.createElement("td");
+    td.textContent = String(day.count);
+    if (day.isToday) {
+      th.className = "is-today";
+      td.className = "is-today";
+      th.setAttribute("aria-current", "date");
+    }
+    head.appendChild(th);
+    body.appendChild(td);
+  }
+  const thead = document.createElement("thead");
+  const tbody = document.createElement("tbody");
+  thead.appendChild(head);
+  tbody.appendChild(body);
+  table.textContent = "";
+  table.append(thead, tbody);
+}
+
 function render() {
   // 1. 목록: 필터, 정렬을 거친 항목만 그린다.
   const visible = sortTodos(filterTodos(state.todos, state.filter));
@@ -140,8 +223,12 @@ function render() {
   document.getElementById("progress-fill").style.width = progress.percent + "%";
   document.getElementById("progress-count").textContent = progress.done + " / " + progress.total;
   document.getElementById("progress-percent").textContent = progress.percent + "%";
+  const celebration = document.getElementById("celebration");
+  celebration.textContent = "🎉 모든 할 일을 완료했습니다.";
+  celebration.hidden = !isAllDone(progress);
+  renderDailyTable(document.getElementById("daily-table"), lastSevenDays(state.dailyLog, new Date()));
 
-  // 3. 카테고리 탭: 전체 탭은 전체 개수만, 나머지는 완료/전체. 현재 필터와 같은 버튼에 is-active 를 붙인다.
+  // 3. 카테고리 탭: 전체 탭은 전체 개수만, 나머지는 완료/전체와 백분율. 현재 필터와 같은 버튼에 is-active 를 붙인다.
   for (const button of document.querySelectorAll("#category-tabs [data-category]")) {
     const category = button.dataset.category;
     button.classList.toggle("is-active", category === state.filter.category);
@@ -149,7 +236,7 @@ function render() {
       button.textContent = "전체 " + state.todos.length;
     } else {
       const count = countByCategory(state.todos, category);
-      button.textContent = category + " " + count.done + "/" + count.total;
+      button.textContent = category + " " + count.done + "/" + count.total + " (" + percentOf(count.done, count.total) + "%)";
     }
   }
 
@@ -177,6 +264,7 @@ function addTodo(text, category, dueDate) {
     category,
     done: false,
     dueDate: dueDate || null, // 날짜 입력은 비어 있으면 ""를 주므로 null로 맞춘다.
+    completedAt: null,
     createdAt: Date.now(),
   });
   saveTodos(state.todos);
@@ -186,8 +274,22 @@ function addTodo(text, category, dueDate) {
 function toggleTodo(id) {
   const todo = state.todos.find(item => item.id === id);
   if (!todo) return;
-  todo.done = !todo.done;
+  if (!todo.done) {
+    // 완료: 오늘 칸에 1을 더하고, 어느 날 센 것인지 completedAt 에 남긴다.
+    const today = formatDate(new Date());
+    todo.done = true;
+    todo.completedAt = today;
+    state.dailyLog[today] = (state.dailyLog[today] || 0) + 1;
+  } else {
+    // 완료 취소: 오늘이 아니라 완료했던 날 칸에서 1을 뺀다. 0 아래로는 내려가지 않는다.
+    // completedAt 이 없는 완료 항목(이 필드가 생기기 전에 완료한 것)은 기록에 센 적이 없으므로 기록을 건드리지 않는다.
+    const day = todo.completedAt;
+    if (typeof day === "string" && state.dailyLog[day] > 0) state.dailyLog[day] -= 1;
+    todo.done = false;
+    todo.completedAt = null;
+  }
   saveTodos(state.todos);
+  saveDailyLog(state.dailyLog);
   render();
 }
 
@@ -334,11 +436,14 @@ document.getElementById("status-filter").addEventListener("click", event => {
 window.addEventListener("focus", () => {
   if (editingId !== null) return;
   const loaded = loadTodos();
-  if (JSON.stringify(loaded) === JSON.stringify(state.todos)) return;
+  const loadedLog = loadDailyLog();
+  if (JSON.stringify(loaded) === JSON.stringify(state.todos) && JSON.stringify(loadedLog) === JSON.stringify(state.dailyLog)) return;
   state.todos = loaded;
+  state.dailyLog = loadedLog;
   render();
 });
 
 // 시작: 저장된 데이터를 불러와 첫 화면을 그린다. 항상 app.js 맨 아래에 둔다.
 state.todos = loadTodos();
+state.dailyLog = loadDailyLog();
 render();

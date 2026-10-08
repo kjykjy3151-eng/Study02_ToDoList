@@ -23,6 +23,8 @@
     <div id="progress-fill"></div>
     <span id="progress-count"></span>
     <span id="progress-percent"></span>
+    <p id="celebration"></p>
+    <table id="daily-table"></table>
     <form id="todo-form"></form>
     <input id="todo-input">
     <select id="category-select"></select>
@@ -165,6 +167,55 @@
       localStorage.removeItem(K);
       localStorage.removeItem(KB);
 
+      // 마이그레이션: completedAt 이 생기기 전에 저장된 할 일은 그대로 읽힌다(없으면 null 로 취급).
+      const legacy = {id: "old", text: "예전 항목", category: "업무", done: true, dueDate: null, createdAt: 1};
+      localStorage.setItem(K, JSON.stringify([legacy]));
+      assertDeepEqual(loadTodos(K), [legacy], "completedAt 이 없는 예전 저장 항목도 버리지 않고 읽는다");
+      localStorage.setItem(K, JSON.stringify([t({id: "n", completedAt: null}), t({id: "s", done: true, completedAt: "2026-10-05"})]));
+      assertDeepEqual(loadTodos(K).map(x => x.id), ["n", "s"], "completedAt 이 null 이거나 문자열인 항목은 읽는다");
+      localStorage.setItem(K, JSON.stringify([t({id: "g"}), t({id: "bad", completedAt: 20261005})]));
+      assertDeepEqual(loadTodos(K).map(x => x.id), ["g"], "completedAt 이 문자열도 null 도 아니면 그 항목만 버린다");
+      localStorage.removeItem(K);
+
+      // 일일 기록 저장 — 사용자 기록(dailyLog.v1)을 건드리지 않도록 별도 키를 쓴다.
+      const LK = "dailyLog.test";
+      localStorage.removeItem(LK);
+      localStorage.removeItem(LK + ".broken");
+      assertDeepEqual(loadDailyLog(LK), {}, "일일 기록이 없으면 빈 객체를 돌려준다");
+      saveDailyLog({"2026-10-09": 5, "2026-10-08": 3}, LK);
+      assertDeepEqual(loadDailyLog(LK), {"2026-10-09": 5, "2026-10-08": 3}, "저장한 일일 기록을 그대로 읽어온다");
+      localStorage.setItem(LK, JSON.stringify({"2026-10-09": 2, "어제": 1, "2026-10-08": -1, "2026-10-07": 1.5, "2026-10-06": "3"}));
+      assertDeepEqual(loadDailyLog(LK), {"2026-10-09": 2}, "날짜 형식이 아니거나 0 이상의 정수가 아닌 항목만 버린다");
+      assertEqual(localStorage.getItem(LK + ".broken"), null, "항목 단위 손상은 broken 키로 옮기지 않는다");
+      for (const bad of ["{{{", "[]", "null", "42"]) {
+        localStorage.setItem(LK, bad);
+        localStorage.removeItem(LK + ".broken");
+        assertDeepEqual(loadDailyLog(LK), {}, `일일 기록이 ${bad} 이면 빈 객체로 시작한다`);
+        assertEqual(localStorage.getItem(LK + ".broken"), bad, `일일 기록 ${bad} 는 broken 키로 옮긴다`);
+      }
+      localStorage.removeItem(LK);
+      localStorage.removeItem(LK + ".broken");
+
+      // 날짜 문자열: 로컬 시간 기준(UTC 변환 없음), 0 채움.
+      assertEqual(formatDate(new Date(2026, 0, 5, 23, 59)), "2026-01-05", "formatDate 는 늦은 밤도 그날로, 월 일을 0 으로 채워 돌려준다");
+      assertEqual(formatDate(new Date(2026, 0, 5, 0, 0)), "2026-01-05", "formatDate 는 자정 직후도 그날로 돌려준다");
+
+      // percentOf / isAllDone
+      assertEqual(percentOf(1, 3), 33, "percentOf 는 내림한다");
+      assertEqual(percentOf(2, 3), 66, "percentOf 는 반올림하지 않고 내림한다");
+      assertEqual(percentOf(0, 0), 0, "percentOf 는 분모가 0이면 0 이다");
+      assertEqual(isAllDone({done: 2, total: 2, percent: 100}), true, "전부 완료면 달성이다");
+      assertEqual(isAllDone({done: 1, total: 2, percent: 50}), false, "일부만 완료면 달성이 아니다");
+      assertEqual(isAllDone({done: 0, total: 0, percent: 0}), false, "빈 목록은 달성이 아니다");
+
+      // lastSevenDays: 오늘로 끝나는 7일, 오래된 날이 앞. 월 경계를 넘고 기록이 없는 날은 0.
+      const week = lastSevenDays({"2026-03-02": 4, "2026-02-27": 1}, new Date(2026, 2, 2, 23, 30));
+      assertDeepEqual(week.map(d => d.date), ["2026-02-24", "2026-02-25", "2026-02-26", "2026-02-27", "2026-02-28", "2026-03-01", "2026-03-02"],
+        "최근 7일은 오늘로 끝나고 월 경계를 넘어 이어진다");
+      assertDeepEqual(week.map(d => d.weekday), ["화", "수", "목", "금", "토", "일", "월"], "요일은 한글 한 글자다");
+      assertDeepEqual(week.map(d => d.count), [0, 0, 0, 1, 0, 0, 4], "기록이 없는 날은 0 이다");
+      assertDeepEqual(week.map(d => d.isToday), [false, false, false, false, false, false, true], "오늘만 isToday 이다");
+
       // renderItem은 <li> 요소를 돌려주는 순수한 DOM 생성 함수다
       const el = renderItem(t({text: '<img src=x onerror="window.__xss=1">'}));
       assertEqual(el.querySelector(".todo-text").textContent, '<img src=x onerror="window.__xss=1">',
@@ -193,6 +244,7 @@
       // render/addTodo/toggleTodo/deleteTodo — 전역 상태를 쓰므로 끝나면 되돌린다.
       const prevTodos = state.todos;
       const prevFilter = state.filter;
+      const prevLog = state.dailyLog;
       const tabs = document.getElementById("category-tabs");
       const select = document.getElementById("category-select");
       for (const c of ["전체", "업무", "개인", "공부"]) {
@@ -234,7 +286,7 @@
         assertEqual(state.todos[1].done, true, "체크박스 클릭이 완료 상태를 바꾼다");
         assertEqual(loadTodos()[1].done, true, "토글 결과가 저장소에 반영된다");
         assertEqual(countText(), "1 / 2", "토글하면 진행 숫자가 갱신된다");
-        assertEqual(tabText("개인"), "개인 1/1", "토글하면 카테고리 탭의 n/m 이 갱신된다");
+        assertEqual(tabText("개인"), "개인 1/1 (100%)", "토글하면 카테고리 탭의 n/m 과 백분율이 갱신된다");
         assertEqual(tabText("전체"), "전체 2", "전체 탭은 전체 개수만 표시한다");
         assertEqual(list.lastElementChild.dataset.id, state.todos[1].id, "완료 항목은 목록 아래로 내려간다");
 
@@ -243,7 +295,7 @@
         render();
         assertEqual(list.children.length, 0, "필터 결과가 없으면 목록이 비어 있다");
         assertEqual(countText(), "1 / 2", "필터를 걸어도 진행 숫자는 전체 데이터 기준이다");
-        assertEqual(tabText("공부"), "공부 0/1", "필터를 걸어도 탭의 n/m 은 전체 데이터 기준이다");
+        assertEqual(tabText("공부"), "공부 0/1 (0%)", "필터를 걸어도 탭의 n/m 과 백분율은 전체 데이터 기준이다");
         assertEqual(empty.hidden, false, "필터 때문에 비면 빈 상태 안내를 보인다");
         assertEqual(empty.textContent !== emptyAllText, true, "필터 때문에 빈 문구는 전체가 빈 문구와 다르다");
         state.filter = {category: "전체", status: "전체"};
@@ -494,8 +546,157 @@
         list.querySelector(".todo-check").click();
         assertEqual(list.children.length, 0, "미완료 항목을 모두 체크하면 목록이 비어 있다");
         assertEqual(document.activeElement, input, "남은 항목이 없으면 포커스는 입력창으로 간다");
+
+        // ----- 최근 7일 성과, 카테고리 백분율, 100% 달성 -----
+        // 일일 기록은 비우고 시작한다. 실제 기록은 하네스가 끝에서 되돌린다.
+        const today = formatDate(new Date());
+        const daysAgo = n => { const d = new Date(); return formatDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - n)); };
+        state.filter = {category: "전체", status: "전체"};
+        state.dailyLog = {};
+        saveDailyLog(state.dailyLog);
+        const storedLog = () => loadDailyLog();
+
+        // 완료하면 오늘 기록이 1 늘고 completedAt 이 오늘이 된다.
+        state.todos = [];
+        addTodo("가", "업무", "2026-10-01");
+        addTodo("나", "업무", "2026-10-02");
+        assertEqual(state.todos[0].completedAt, null, "새로 추가한 할 일의 completedAt 은 null 이다");
+        const idA = state.todos[0].id;
+        const idB = state.todos[1].id;
+        list.children[0].querySelector(".todo-check").click();
+        assertEqual(state.todos.find(x => x.id === idA).done, true, "첫 항목이 완료됐다");
+        assertEqual(state.dailyLog[today], 1, "완료하면 오늘 기록이 1 늘어난다");
+        assertEqual(state.todos.find(x => x.id === idA).completedAt, today, "완료하면 completedAt 이 오늘 날짜가 된다");
+        assertEqual(storedLog()[today], 1, "오늘 기록이 저장소에 반영된다");
+        assertEqual(loadTodos().find(x => x.id === idA).completedAt, today, "completedAt 이 저장소에 반영된다");
+        toggleTodo(idB);
+        assertEqual(state.dailyLog[today], 2, "하나 더 완료하면 오늘 기록이 2 가 된다");
+
+        // 완료를 취소하면 오늘 기록이 줄고 completedAt 이 비워진다.
+        toggleTodo(idB);
+        assertEqual(state.dailyLog[today], 1, "완료를 취소하면 기록이 1 줄어든다");
+        assertEqual(state.todos.find(x => x.id === idB).completedAt, null, "완료를 취소하면 completedAt 이 null 이 된다");
+        assertEqual(storedLog()[today], 1, "취소 결과가 저장소에 반영된다");
+
+        // 핵심: 취소는 오늘이 아니라 완료했던 날의 기록에서 뺀다. completedAt 을 과거로 직접 만들어 확인한다.
+        const monday = "2026-10-05";
+        state.todos = [t({id: "past", done: true, completedAt: monday})];
+        state.dailyLog = {[monday]: 3, [today]: 2};
+        toggleTodo("past");
+        assertEqual(state.dailyLog[monday], 2, "과거에 완료한 항목을 취소하면 완료했던 날의 기록이 줄어든다");
+        assertEqual(state.dailyLog[today], 2, "과거에 완료한 항목을 취소해도 오늘 기록은 그대로다");
+        assertEqual(storedLog()[monday], 2, "완료했던 날의 감소가 저장소에 반영된다");
+        assertEqual(state.todos[0].completedAt, null, "취소하면 completedAt 은 null 이다");
+
+        // 같은 시나리오를 처음부터 끝까지: 월요일에 완료하고 다른 날 취소한다(formatDate 로 "오늘"을 바꿔 완료 시점을 과거로 보낸다).
+        const realFormatDate = formatDate;
+        state.todos = [t({id: "e2e"})];
+        state.dailyLog = {};
+        formatDate = () => monday;
+        try {
+          toggleTodo("e2e");
+        } finally {
+          formatDate = realFormatDate;
+        }
+        assertEqual(state.dailyLog[monday], 1, "월요일에 완료하면 월요일 기록이 1 이다");
+        assertEqual(state.todos[0].completedAt, monday, "월요일에 완료하면 completedAt 이 월요일이다");
+        toggleTodo("e2e");
+        assertEqual(state.dailyLog[monday], 0, "다른 날 취소하면 월요일 기록이 줄어든다");
+        assertEqual(state.dailyLog[today], undefined, "다른 날 취소해도 그날 기록이 생기거나 줄지 않는다");
+
+        // 0 아래로 내려가지 않는다.
+        state.todos = [t({id: "z1", done: true, completedAt: monday}), t({id: "z2", done: true, completedAt: monday})];
+        state.dailyLog = {[monday]: 0};
+        toggleTodo("z1");
+        assertEqual(state.dailyLog[monday], 0, "기록이 0 인 날의 완료를 취소해도 0 아래로 내려가지 않는다");
+        state.dailyLog = {};
+        toggleTodo("z2");
+        assertDeepEqual(state.dailyLog, {}, "기록이 없는 날의 완료를 취소해도 음수나 새 항목이 생기지 않는다");
+
+        // 마이그레이션: completedAt 이 없는 예전 완료 항목은 기록에 센 적이 없으므로 취소해도 기록을 건드리지 않는다.
+        const oldDone = {id: "old", text: "예전", category: "개인", done: true, dueDate: null, createdAt: 1};
+        state.todos = [oldDone];
+        state.dailyLog = {[today]: 2};
+        toggleTodo("old");
+        assertEqual(state.todos[0].done, false, "completedAt 이 없는 예전 완료 항목도 취소된다");
+        assertDeepEqual(state.dailyLog, {[today]: 2}, "completedAt 이 없는 예전 항목을 취소해도 기록은 그대로다");
+        assertEqual(state.todos[0].completedAt, null, "취소 후 completedAt 은 null 이다");
+
+        // 삭제는 기록을 건드리지 않는다.
+        state.todos = [t({id: "d", done: true, completedAt: today})];
+        state.dailyLog = {[today]: 1};
+        saveDailyLog(state.dailyLog);
+        render();
+        list.querySelector(".todo-delete").click();
+        assertEqual(state.todos.length, 0, "완료한 항목을 삭제하면 목록에서 사라진다");
+        assertDeepEqual(state.dailyLog, {[today]: 1}, "완료한 항목을 삭제해도 기록은 줄지 않는다");
+        assertDeepEqual(storedLog(), {[today]: 1}, "삭제 후 저장소의 기록도 그대로다");
+
+        // 7일 표
+        const dailyTable = document.getElementById("daily-table");
+        state.todos = [];
+        state.dailyLog = {[today]: 4, [daysAgo(2)]: 7, [daysAgo(10)]: 9};
+        render();
+        const heads = dailyTable.querySelectorAll("th");
+        const cells = dailyTable.querySelectorAll("td");
+        assertEqual(heads.length, 7, "7일 표는 요일 머리글이 7칸이다");
+        assertEqual(cells.length, 7, "7일 표는 값 칸이 7칸이다");
+        assertDeepEqual(Array.from(heads).map(h => h.textContent),
+          lastSevenDays({}, new Date()).map(d => d.weekday), "머리글은 오래된 날부터 오늘까지의 한글 요일이다");
+        assertEqual(Array.from(heads).every(h => "일월화수목금토".includes(h.textContent) && h.textContent.length === 1), true, "요일은 한 글자다");
+        assertEqual(cells[6].textContent, "4", "맨 오른쪽 칸이 오늘의 완료 수다");
+        assertEqual(cells[4].textContent, "7", "이틀 전 칸에 그날의 완료 수가 표시된다");
+        assertEqual(cells[5].textContent, "0", "기록이 없는 어제는 0 으로 표시된다");
+        assertEqual(cells[0].textContent, "0", "7일보다 오래된 기록은 표에 나오지 않고 기록이 없는 6일 전은 0 이다");
+        assertDeepEqual(Array.from(heads).map(h => h.classList.contains("is-today")), [false, false, false, false, false, false, true], "오늘 머리글만 is-today 로 표시한다");
+        assertDeepEqual(Array.from(cells).map(c => c.classList.contains("is-today")), [false, false, false, false, false, false, true], "오늘 값 칸만 is-today 로 표시한다");
+        state.dailyLog = {};
+        render();
+        assertEqual(dailyTable.querySelectorAll("td").length, 7, "다시 그려도 칸은 7개다(쌓이지 않는다)");
+        assertEqual(Array.from(dailyTable.querySelectorAll("td")).every(c => c.textContent === "0"), true, "기록이 비면 7칸 모두 0 이다");
+
+        // 카테고리 탭 백분율
+        const celebration = document.getElementById("celebration");
+        state.todos = [
+          t({id: "w1", category: "업무", done: true}),
+          t({id: "w2", category: "업무"}),
+          t({id: "w3", category: "업무"}),
+          t({id: "p1", category: "개인", done: true}),
+        ];
+        render();
+        assertEqual(tabText("업무"), "업무 1/3 (33%)", "카테고리 탭에 n/m 과 내림한 백분율이 표시된다");
+        assertEqual(tabText("개인"), "개인 1/1 (100%)", "전부 완료한 카테고리는 100% 다");
+        assertEqual(tabText("공부"), "공부 0/0 (0%)", "항목이 없는 카테고리는 0/0 (0%) 이고 오류가 없다");
+        assertEqual(tabText("전체"), "전체 4", "전체 탭은 백분율 없이 전체 개수만 표시한다");
+
+        // 100% 달성 표시
+        assertEqual(celebration.hidden, true, "일부만 완료했으면 달성 문구가 숨겨져 있다");
+        state.todos = [t({id: "c1", done: true}), t({id: "c2", done: true})];
+        render();
+        assertEqual(celebration.hidden, false, "전부 완료하면 달성 문구가 보인다");
+        assertEqual(/[.]$/.test(celebration.textContent) && celebration.textContent.length > 3, true, "달성 문구는 마침표로 끝나는 문장이다");
+        state.todos = [];
+        render();
+        assertEqual(celebration.hidden, true, "빈 목록(0 / 0)에서는 달성 문구가 나타나지 않는다");
+        state.todos = [t({id: "c1", done: true}), t({id: "c2", done: true}), t({id: "c3", done: false})];
+        render();
+        assertEqual(celebration.hidden, true, "하나라도 남아 있으면 달성 문구가 숨겨진다");
+
+        // 실제 클릭으로: 마지막 항목을 체크하면 나타나고, 체크를 풀면 사라진다. 필터를 걸어도 전체 기준이다.
+        state.todos = [t({id: "k1", done: true, completedAt: today}), t({id: "k2", dueDate: "2026-10-01"})];
+        state.dailyLog = {};
+        state.filter = {category: "업무", status: "전체"};
+        render();
+        assertEqual(celebration.hidden, true, "필터로 목록이 비어 있어도 전체가 미완료면 달성 문구는 숨겨진다");
+        state.filter = {category: "전체", status: "전체"};
+        render();
+        list.children[0].querySelector(".todo-check").click();
+        assertEqual(celebration.hidden, false, "마지막 항목을 체크하면 달성 문구가 나타난다");
+        list.children[0].querySelector(".todo-check").click();
+        assertEqual(celebration.hidden, true, "체크를 풀면 달성 문구가 사라진다");
       } finally {
         state.todos = prevTodos;
+        state.dailyLog = prevLog;
         state.filter = prevFilter;
         stub.hidden = true;
         tabs.textContent = "";
@@ -510,7 +711,9 @@
     // 하네스는 실제 사용자 데이터(todos.v1)를 보호한다.
     // 이후 과제의 테스트가 저장 함수를 호출해도 사용자의 할 일이 덮어써지지 않도록,
     // 실행 전에 값을 저장해 두고 실행 후(예외가 나도) 되돌린다.
+    // 일일 기록(dailyLog.v1)도 같은 이유로 되돌린다. 지우면 사용자의 성과 이력이 사라진다.
     const savedTodos = localStorage.getItem("todos.v1");
+    const savedLog = localStorage.getItem("dailyLog.v1");
     try {
       runTests();
     } catch (err) {
@@ -521,6 +724,11 @@
         localStorage.removeItem("todos.v1");
       } else {
         localStorage.setItem("todos.v1", savedTodos);
+      }
+      if (savedLog === null) {
+        localStorage.removeItem("dailyLog.v1");
+      } else {
+        localStorage.setItem("dailyLog.v1", savedLog);
       }
     }
 
