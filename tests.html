@@ -11,6 +11,7 @@
     #summary.is-pass { color: #1e8449; }
     .fail { color: #c0392b; margin: 8px 0; white-space: pre-wrap; }
     .pass { color: #1e8449; margin: 2px 0; }
+    .skip { color: #9a6700; margin: 8px 0; }
   </style>
 </head>
 <body>
@@ -869,6 +870,134 @@
       }
     }
 
+    // 첫 페인트 전 표시 설정(index.html 의 <head> 인라인 스크립트)과 색 대비.
+    // 실제 index.html, style.css 를 동기 XHR 로 읽는다. file:// 에서는 브라우저가 이를 막으므로 그때는 건너뛴다고 알린다(통과로 세지 않는다).
+    function readSibling(path) {
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", path + "?t=" + Date.now(), false);
+        xhr.send();
+        if ((xhr.status === 200 || xhr.status === 0) && xhr.responseText) return xhr.responseText;
+      } catch (err) {
+        // 아래에서 null 로 처리한다.
+      }
+      return null;
+    }
+
+    function reportSkip(message) {
+      const line = document.createElement("div");
+      line.className = "skip";
+      line.textContent = "건너뜀: " + message;
+      document.getElementById("results").appendChild(line);
+    }
+
+    function luminance(hex) {
+      const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    }
+
+    function contrastRatio(a, b) {
+      const x = luminance(a);
+      const y = luminance(b);
+      return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+    }
+
+    function runFirstPaintTests() {
+      const root = document.documentElement;
+      const indexHtml = readSibling("index.html");
+      if (indexHtml === null) {
+        reportSkip("index.html 을 읽을 수 없어 첫 페인트 스크립트 테스트를 하지 않았다(file:// 에서는 로컬 HTTP 서버로 열어야 한다).");
+      } else {
+        const doc = new DOMParser().parseFromString(indexHtml, "text/html");
+        const scripts = Array.from(doc.head.querySelectorAll("script"));
+        assertEqual(scripts.length, 1, "<head> 에 스크립트가 하나 있다");
+        const script = scripts[0];
+        assertEqual(script.hasAttribute("src") || script.hasAttribute("type"), false, "<head> 스크립트는 인라인 일반 스크립트다(src 도 type=module 도 아니다)");
+
+        // 인라인 스크립트의 실제 본문을 가짜 document, localStorage 로 실행한다. 진짜 저장소와 화면은 건드리지 않는다.
+        const runInline = storage => {
+          const fakeRoot = document.createElement("html");
+          let threw = false;
+          try {
+            new Function("document", "localStorage", script.textContent)({documentElement: fakeRoot}, storage);
+          } catch (err) {
+            threw = true;
+          }
+          return {threw, theme: fakeRoot.getAttribute("data-theme"), layout: fakeRoot.getAttribute("data-layout"), attrs: fakeRoot.getAttributeNames().sort().join(",")};
+        };
+        const withRaw = raw => ({getItem: key => key === "prefs.v1" ? raw : null});
+
+        const dark = runInline(withRaw(JSON.stringify({theme: "dark", layout: "auto"})));
+        assertEqual(dark.theme, "dark", "저장된 다크 선택을 첫 페인트 전에 data-theme 으로 붙인다");
+        assertEqual(dark.layout, null, "layout 이 auto 이면 data-layout 을 붙이지 않는다");
+        const single = runInline(withRaw(JSON.stringify({theme: null, layout: "single"})));
+        assertEqual(single.layout, "single", "저장된 한 줄 고정 선택을 data-layout=single 로 붙인다");
+        assertEqual(single.theme, null, "theme 이 null 이면 data-theme 을 붙이지 않는다(OS 설정을 미디어 쿼리가 따른다)");
+        const both = runInline(withRaw(JSON.stringify({theme: "light", layout: "single"})));
+        assertEqual(both.theme + "/" + both.layout, "light/single", "두 선택을 함께 붙인다");
+
+        // 깨진 입력, 저장소 없음에서도 예외 없이 아무것도 붙이지 않는다.
+        const brokenCases = [
+          ["깨진 JSON", withRaw("{{{")],
+          ["저장값 없음", withRaw(null)],
+          ["배열", withRaw("[1]")],
+          ["문자열", withRaw("\"dark\"")],
+          ["허용되지 않은 값", withRaw(JSON.stringify({theme: "sepia", layout: 3}))],
+          ["localStorage 접근이 예외를 던짐", {getItem() { throw new Error("denied"); }}],
+          ["localStorage 가 없음", undefined],
+        ];
+        for (const [label, storage] of brokenCases) {
+          const result = runInline(storage);
+          assertEqual(result.threw, false, `${label}: 인라인 스크립트가 예외를 던지지 않는다`);
+          assertEqual(result.attrs, "", `${label}: 아무 속성도 붙이지 않는다`);
+        }
+
+        // app.js 와 같은 결과를 내는지: 같은 prefs.v1 값에 renderPrefs 가 붙인 속성과 인라인 스크립트가 붙인 속성이 같아야 한다.
+        const agreeCases = [
+          {theme: "dark", layout: "single"}, {theme: "light", layout: "auto"}, {theme: null, layout: "single"},
+          {theme: "dark"}, {theme: "sepia", layout: "single"}, {layout: "wide"},
+        ];
+        for (const prefs of agreeCases) {
+          const raw = JSON.stringify(prefs);
+          localStorage.setItem("prefs.v1", raw);
+          state.prefs = loadPrefs();
+          renderPrefs();
+          const fromApp = ["data-theme", "data-layout"].map(name => name + "=" + root.getAttribute(name)).join(";");
+          const result = runInline(withRaw(raw));
+          const fromInline = "data-theme=" + result.theme + ";data-layout=" + result.layout;
+          assertEqual(fromInline, fromApp, `인라인 스크립트와 app.js 가 같은 속성을 붙인다: ${raw}`);
+          assertEqual(result.attrs.split(",").filter(name => name && name !== "data-theme" && name !== "data-layout").length, 0, `인라인 스크립트는 두 속성 말고는 붙이지 않는다: ${raw}`);
+        }
+        localStorage.removeItem("prefs.v1");
+        state.prefs = loadPrefs();
+        renderPrefs();
+      }
+
+      // 색 대비: 렌더 결과가 아니라 style.css 의 색 토큰 쌍을 직접 계산한다. 실제 칠해진 배경 기준 측정은 이 하네스에서 하지 않는다.
+      const css = readSibling("style.css");
+      if (css === null) {
+        reportSkip("style.css 를 읽을 수 없어 색 대비 테스트를 하지 않았다(file:// 에서는 로컬 HTTP 서버로 열어야 한다).");
+        return;
+      }
+      const tokens = block => {
+        const out = {};
+        for (const m of block.matchAll(/--([a-z-]+):\s*(#[0-9a-fA-F]{6})/g)) out[m[1]] = m[2];
+        return out;
+      };
+      const themes = {
+        "라이트": tokens(css.match(/:root\s*\{([^}]*)\}/)[1]),
+        "다크": tokens(css.match(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/)[1]),
+      };
+      const pairs = [["muted", "bg"], ["muted", "surface"], ["accent", "today-bg"], ["accent", "bg"], ["accent", "surface"], ["on-accent", "accent"], ["text", "bg"]];
+      for (const [theme, t] of Object.entries(themes)) {
+        for (const [fg, bg] of pairs) {
+          const ratio = contrastRatio(t[fg], t[bg]);
+          assertEqual(ratio >= 4.5, true, `${theme} 테마: --${fg} 와 --${bg} 의 대비가 4.5:1 이상이다(${ratio.toFixed(2)})`);
+        }
+      }
+    }
+
     // 하네스는 실제 사용자 데이터(todos.v1)를 보호한다.
     // 이후 과제의 테스트가 저장 함수를 호출해도 사용자의 할 일이 덮어써지지 않도록,
     // 실행 전에 값을 저장해 두고 실행 후(예외가 나도) 되돌린다.
@@ -881,6 +1010,7 @@
     try {
       runTests();
       runPrefsTests();
+      runFirstPaintTests();
     } catch (err) {
       failed++;
       report(false, "실패: 테스트 실행 중 예외가 발생했다.\n  " + err);

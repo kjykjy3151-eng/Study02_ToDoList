@@ -5,6 +5,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>할 일</title>
+  <!-- 첫 페인트 전에 저장된 표시 설정(prefs.v1)만 <html> 속성으로 옮긴다. 본문이 그려지기 전에 맞춰 두려는 것이고,
+       읽기와 검증은 app.js 의 loadPrefs, renderPrefs 가 이어서 한다. 속성 이름과 값은 renderPrefs 와 같아야 한다. -->
+  <script>
+    try {
+      const prefs = JSON.parse(localStorage.getItem("prefs.v1"));
+      if (prefs.theme === "light" || prefs.theme === "dark") document.documentElement.setAttribute("data-theme", prefs.theme);
+      if (prefs.layout === "single") document.documentElement.setAttribute("data-layout", "single");
+    } catch (err) {
+      // 저장소를 못 읽거나 값이 깨졌으면 아무것도 붙이지 않는다. OS 설정은 미디어 쿼리가 정한다.
+    }
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>

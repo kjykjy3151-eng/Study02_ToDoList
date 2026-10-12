@@ -5,8 +5,8 @@
   --surface: #ffffff;
   --border: #d9dce1;
   --text: #1f2430;
-  --muted: #6b7280;
-  --accent: #3b6fd8;
+  --muted: #656c79; /* 페이지 바탕(--bg) 위에서도 4.5:1 이상. */
+  --accent: #3162c4; /* 오늘 칸 바탕(--today-bg)과 페이지 바탕 위 글자로도 4.5:1 이상. */
   --on-accent: #ffffff; /* 강조색 바탕 위의 글자색 */
   --today-bg: #e8effc;
   --danger: #d33;
